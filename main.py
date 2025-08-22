@@ -32,9 +32,16 @@
 #   pip install fastapi uvicorn[standard] httpx pydantic
 #   uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 
+
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
+from dotenv import load_dotenv
+
+# Load environment variables at module import time
+load_dotenv()
+
 
 from operations import (
     get_health_info,
@@ -97,3 +104,13 @@ async def _startup():
 async def _shutdown():
     """Cleanup resources on shutdown"""
     await cleanup()
+
+# ------------------- Server startup -------------------
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host=os.getenv("APP_HOST", "0.0.0.0"),
+        port=int(os.getenv("APP_PORT", "8000")),
+        reload=os.getenv("APP_RELOAD", "True").lower() == "true"
+    )
