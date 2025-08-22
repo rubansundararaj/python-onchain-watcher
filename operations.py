@@ -5,6 +5,10 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import HTTPException
+from dotenv import load_dotenv
+
+# Load environment variables at module import time
+load_dotenv()
 
 ELECTRUM_RPC_URL = os.getenv("ELECTRUM_RPC_URL", "http://127.0.0.1:7777")
 ELECTRUM_RPC_USER = os.getenv("ELECTRUM_RPC_USER", "")
@@ -15,6 +19,7 @@ MIN_CONFS = int(os.getenv("MIN_CONFS", "1"))
 
 if not ELECTRUM_RPC_USER or not ELECTRUM_RPC_PASS:
     print("[WARN] ELECTRUM_RPC_USER/PASS not set — RPC calls will fail until you set them.")
+    print("[WARN] Make sure you have a .env file or environment variables set.")
 
 # ------------------- RPC helper -------------------
 class ElectrumRPC:
