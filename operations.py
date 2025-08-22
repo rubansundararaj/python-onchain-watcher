@@ -60,7 +60,14 @@ async def get_address_balance(address: str):
 
 async def get_address_utxos(address: str, min_conf: int = 0, max_conf: int = 9999999):
     """Get UTXOs for a specific address"""
-    return await rpc.call("listunspent", [min_conf, max_conf, [address]])
+    # Try using getaddressutxos first, fallback to listunspent if needed
+    try:
+        # getaddressutxos is more specific and should work better
+        return await rpc.call("getaddressutxos", [address])
+    except Exception:
+        # Fallback to listunspent with proper parameters
+        # Make sure we're not passing conflicting wallet parameters
+        return await rpc.call("listunspent", [min_conf, max_conf, [address]])
 
 async def watch_address(address: str, webhook: Optional[str] = None):
     """Start watching an address for changes"""
@@ -95,7 +102,10 @@ async def watcher_loop():
                     changed = (conf != st["last_confirmed"]) or (unconf != st["last_unconfirmed"]) 
                     if changed and st.get("webhook"):
                         # also include current UTXOs + chain tip
-                        utxos = await rpc.call("listunspent", [0, 9999999, [addr]])
+                        try:
+                            utxos = await rpc.call("getaddressutxos", [addr])
+                        except Exception:
+                            utxos = await rpc.call("listunspent", [0, 9999999, [addr]])
                         info = await rpc.call("getinfo")
                         payload = {
                             "event": "payment",
