@@ -69,8 +69,18 @@ async def get_address_history(address: str):
 
 async def get_transaction_details(txid: str):
     """Get full transaction details by transaction ID"""
-    # Use verbose=True to get parsed transaction details instead of raw hex
-    return await rpc.call("gettransaction", [txid, True])
+    # Try different approaches to get parsed transaction details
+    try:
+        # Method 1: Try getrawtransaction with decode=True (most reliable)
+        return await rpc.call("getrawtransaction", [txid, True])
+    except Exception:
+        try:
+            # Method 2: Try gettransaction without verbose
+            return await rpc.call("gettransaction", [txid])
+        except Exception:
+            # Method 3: Fallback to raw hex if all else fails
+            raw_tx = await rpc.call("getrawtransaction", [txid, False])
+            return {"txid": txid, "raw_hex": raw_tx, "note": "Raw transaction data - needs decoding"}
 
 async def watch_address(address: str, webhook: Optional[str] = None):
     """Start watching an address for changes"""
