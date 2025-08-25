@@ -69,7 +69,8 @@ async def get_address_history(address: str):
 
 async def get_transaction_details(txid: str):
     """Get full transaction details by transaction ID"""
-    return await rpc.call("gettransaction", [txid])
+    # Use verbose=True to get parsed transaction details instead of raw hex
+    return await rpc.call("gettransaction", [txid, True])
 
 async def watch_address(address: str, webhook: Optional[str] = None):
     """Start watching an address for changes"""
