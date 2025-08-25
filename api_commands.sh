@@ -27,19 +27,27 @@ echo "5. Get Address UTXOs (with confirmation filters):"
 echo "curl -X GET \"http://localhost:8000/addresses/bc1q3ppsy7pwmhfwkudkaupv9rmnsc59al0smzctwf/utxos?min_conf=1&max_conf=9999999\""
 echo ""
 
-echo "6. Watch Address (default webhook):"
+echo "6. Get Address Transaction History:"
+echo "curl -X GET http://localhost:8000/addresses/bc1q3ppsy7pwmhfwkudkaupv9rmnsc59al0smzctwf/history"
+echo ""
+
+echo "7. Get Transaction Details:"
+echo "curl -X GET http://localhost:8000/transactions/abc123def456.../transaction"
+echo ""
+
+echo "8. Watch Address (default webhook):"
 echo "curl -X POST \"http://localhost:8000/watch\" \\"
 echo "  -H \"Content-Type: application/json\" \\"
 echo "  -d '{\"address\": \"bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh\"}'"
 echo ""
 
-echo "7. Watch Address (custom webhook):"
+echo "9. Watch Address (custom webhook):"
 echo "curl -X POST \"http://localhost:8000/watch\" \\"
 echo "  -H \"Content-Type: application/json\" \\"
 echo "  -d '{\"address\": \"bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh\", \"webhook\": \"https://your-webhook.com/endpoint\"}'"
 echo ""
 
-echo "8. List Watched Addresses:"
+echo "10. List Watched Addresses:"
 echo "curl -X GET \"http://localhost:8000/watch\""
 echo ""
 
@@ -59,3 +67,9 @@ echo "- Replace example addresses with real Bitcoin addresses you want to monito
 echo "- Make sure your server is running (python main.py)"
 echo "- Check your environment variables are set correctly"
 echo "- The webhook endpoint needs to be accessible from your server"
+
+
+
+curl -u ruban:'InsaneElonTrump' \
+  --data-binary '{"jsonrpc":"2.0","id":1,"method":"getaddresshistory","params":["bc1qrnrdpceunnkj6j8h9whw7n52uq8she4ne5n9y5"]}' \
+  http://127.0.0.1:7777 | jq

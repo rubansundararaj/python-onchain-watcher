@@ -63,6 +63,14 @@ async def get_address_utxos(address: str, min_conf: int = 0, max_conf: int = 999
     # Use getaddressunspent which is the correct method for getting UTXOs for a specific address
     return await rpc.call("getaddressunspent", [address])
 
+async def get_address_history(address: str):
+    """Get complete transaction history for an address"""
+    return await rpc.call("getaddresshistory", [address])
+
+async def get_transaction_details(txid: str):
+    """Get full transaction details by transaction ID"""
+    return await rpc.call("gettransaction", [txid])
+
 async def watch_address(address: str, webhook: Optional[str] = None):
     """Start watching an address for changes"""
     webhook_url = webhook if webhook else WEBHOOK_URL

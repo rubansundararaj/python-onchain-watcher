@@ -48,6 +48,8 @@ from operations import (
     create_new_address,
     get_address_balance,
     get_address_utxos,
+    get_address_history,
+    get_transaction_details,
     watch_address,
     list_watched_addresses,
     watcher_loop,
@@ -82,6 +84,18 @@ async def address_utxos(address: str, min_conf: int = 0, max_conf: int = 9999999
     """Get UTXOs for a specific address"""
     utxos = await get_address_utxos(address, min_conf, max_conf)
     return {"address": address, "utxos": utxos}
+
+@app.get("/addresses/{address}/history")
+async def address_history(address: str):
+    """Get complete transaction history for an address"""
+    history = await get_address_history(address)
+    return {"address": address, "history": history}
+
+@app.get("/transactions/{txid}")
+async def transaction_details(txid: str):
+    """Get full transaction details by transaction ID"""
+    tx = await get_transaction_details(txid)
+    return {"txid": txid, "transaction": tx}
 
 @app.post("/watch")
 async def watch_address_endpoint(req: WatchReq):
