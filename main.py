@@ -5,6 +5,7 @@
 #
 # Endpoints:
 #   GET    /health                          -> electrum.getinfo
+#   GET    /block-height                    -> electrum.getinfo (server_height)
 #   POST   /addresses                       -> electrum.createnewaddress
 #   GET    /addresses/{address}/balance     -> electrum.getaddressbalance
 #   GET    /addresses/{address}/utxos       -> electrum.listunspent (scoped)
@@ -53,7 +54,8 @@ from operations import (
     watch_address,
     list_watched_addresses,
     watcher_loop,
-    cleanup
+    cleanup,
+    get_current_block_height
 )
 from models import WatchReq
 
@@ -65,6 +67,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 async def health():
     """Get electrum server health info"""
     return await get_health_info()
+
+@app.get("/block-height")
+async def current_block_height():
+    """Get the current block height from the electrum server"""
+    return await get_current_block_height()
 
 @app.post("/addresses")
 async def create_address():

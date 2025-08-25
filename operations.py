@@ -50,6 +50,11 @@ async def get_health_info():
     """Get electrum server info"""
     return await rpc.call("getinfo")
 
+async def get_current_block_height():
+    """Get the current block height from the electrum server"""
+    info = await rpc.call("getinfo")
+    return {"height": info.get("server_height")}
+
 async def create_new_address():
     """Create a new address"""
     return await rpc.call("createnewaddress")
