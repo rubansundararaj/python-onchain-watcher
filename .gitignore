@@ -1,2 +1,4 @@
 venv/
 .env
+fix_env.sh
+.env.backup

@@ -55,7 +55,8 @@ from operations import (
     list_watched_addresses,
     watcher_loop,
     cleanup,
-    get_current_block_height
+    get_current_block_height,
+    startup
 )
 from models import WatchReq
 
@@ -119,6 +120,9 @@ async def list_watch():
 @app.on_event("startup")
 async def _startup():
     """Start the background watcher loop"""
+    # Initialize wallet and other resources
+    await startup()
+    # Start the background watcher loop
     asyncio.create_task(watcher_loop())
 
 @app.on_event("shutdown")
