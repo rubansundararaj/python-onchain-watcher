@@ -57,10 +57,10 @@ async def ensure_wallet_loaded():
             await rpc.call("create", [wallet_name])
             print(f"[INFO] Created new wallet: {wallet_name}")
         
-        # Try to load the default wallet
+        # Try to load a wallet (using empty params as that's what worked)
         try:
-            await rpc.call("load_wallet", ["default"])
-            print("[INFO] Loaded default wallet")
+            await rpc.call("load_wallet", [])
+            print("[INFO] Wallet loaded successfully")
         except Exception as e:
             # Wallet might already be loaded, continue
             print(f"[INFO] Wallet loading status: {e}")

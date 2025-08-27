@@ -78,3 +78,12 @@ curl -u ruban:'InsaneElonTrump' \
 curl -u ruban:'InsaneElonTrump' \
   --data-binary '{"jsonrpc":"2.0","id":1,"method":"gettransaction","params":["2f82fdcad6674704e0f6b752abdb6dbba7829e6043bf88d33104f3bb585600e8","bc1qrnrdpceunnkj6j8h9whw7n52uq8she4ne5n9y5"]}' \
   http://127.0.0.1:7777 | jq
+
+
+curl -u ruban:'InsaneElonTrump' \
+  --data-binary '{"jsonrpc":"2.0","id":1,"method":"load_wallet","params":["default"]}' \
+  http://127.0.0.1:7777
+
+curl -u ruban:'InsaneElonTrump' \
+  --data-binary '{"jsonrpc":"2.0","id":1,"method":"load_wallet","params":[]}' \
+  http://127.0.0.1:7777 | jq
