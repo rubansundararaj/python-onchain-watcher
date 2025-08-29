@@ -121,11 +121,26 @@ async def list_watch():
 @app.post("/transfer")
 async def transfer_bitcoin_endpoint(req: TransferReq):
     """Transfer Bitcoin from a source address to a destination address"""
-    return await transfer_bitcoin_to_cold_storage(
-        req.source_address,
-        req.amount_sats,
-        req.fee_rate
-    )
+    print(f"[ENDPOINT] /transfer called with request:")
+    print(f"[ENDPOINT]   source_address: {req.source_address}")
+    print(f"[ENDPOINT]   destination_address: {req.destination_address}")
+    print(f"[ENDPOINT]   amount_sats: {req.amount_sats}")
+    print(f"[ENDPOINT]   fee_rate: {req.fee_rate}")
+    
+    try:
+        print(f"[ENDPOINT] Calling transfer_bitcoin function...")
+        result = await transfer_bitcoin(
+            req.source_address,
+            req.destination_address,
+            req.amount_sats,
+            req.fee_rate
+        )
+        print(f"[ENDPOINT] ✓ Transfer completed successfully, returning result")
+        return result
+    except Exception as e:
+        print(f"[ENDPOINT] ❌ Error in transfer endpoint: {e}")
+        print(f"[ENDPOINT] Error type: {type(e).__name__}")
+        raise
 
 # ------------------- Background watcher -------------------
 @app.on_event("startup")

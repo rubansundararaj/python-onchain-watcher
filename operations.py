@@ -48,24 +48,31 @@ WATCH: Dict[str, Dict[str, Any]] = {}
 # ------------------- Operations -------------------
 async def ensure_wallet_loaded():
     """Ensure a wallet is loaded for operations that require it"""
+    print(f"[WALLET] Ensuring wallet is loaded...")
     try:
         # Check if we have any wallets
+        print(f"[WALLET] Checking for existing wallets...")
         wallets = await rpc.call("list_wallets")
+        print(f"[WALLET] Found wallets: {wallets}")
+        
         if not wallets:
             # No wallets exist, create one
             wallet_name = "default"
+            print(f"[WALLET] No wallets found, creating new wallet: {wallet_name}")
             await rpc.call("create", [wallet_name])
-            print(f"[INFO] Created new wallet: {wallet_name}")
+            print(f"[WALLET] ✓ Created new wallet: {wallet_name}")
         
         # Try to load a wallet (using empty params as that's what worked)
         try:
+            print(f"[WALLET] Attempting to load wallet...")
             await rpc.call("load_wallet", [])
-            print("[INFO] Wallet loaded successfully")
+            print(f"[WALLET] ✓ Wallet loaded successfully")
         except Exception as e:
             # Wallet might already be loaded, continue
-            print(f"[INFO] Wallet loading status: {e}")
+            print(f"[WALLET] ⚠️ Wallet loading status: {e}")
     except Exception as e:
-        print(f"[WARN] Wallet management issue: {e}")
+        print(f"[WALLET] ❌ Wallet management issue: {e}")
+        raise
 
 async def get_health_info():
     """Get electrum server info"""
@@ -206,43 +213,73 @@ async def startup():
 
 
 
-async def transfer_bitcoin_to_cold_storage(source_address: str, amount_sats: int, fee_rate: Optional[int] = None):
+async def transfer_bitcoin(source_address: str, destination_address: str, amount_sats: int, fee_rate: Optional[int] = None):
     """Transfer Bitcoin from a source address to a destination address"""
+    print(f"[TRANSFER] Starting transfer: {source_address} -> {destination_address}, amount: {amount_sats} sats, fee_rate: {fee_rate}")
+    
     try:
-        destination_address = "bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne"
+        print(f"[TRANSFER] Step 1: Ensuring wallet is loaded...")
         # Ensure wallet is loaded
         await ensure_wallet_loaded()
+        print(f"[TRANSFER] ✓ Wallet loaded successfully")
         
+        print(f"[TRANSFER] Step 2: Getting UTXOs for source address {source_address}...")
         # Get UTXOs for the source address
         utxos = await rpc.call("getaddressunspent", [source_address])
+        print(f"[TRANSFER] ✓ Got UTXOs: {len(utxos) if utxos else 0} UTXOs found")
+        
         if not utxos:
+            print(f"[TRANSFER] ❌ No UTXOs found for source address {source_address}")
             raise HTTPException(status_code=400, detail=f"No UTXOs found for source address {source_address}")
         
+        print(f"[TRANSFER] Step 3: Calculating total available balance...")
         # Calculate total available balance
         total_available = sum(utxo.get("amount", 0) for utxo in utxos)
+        print(f"[TRANSFER] ✓ Total available: {total_available} sats")
+        
         if total_available < amount_sats:
+            print(f"[TRANSFER] ❌ Insufficient balance. Available: {total_available} sats, requested: {amount_sats} sats")
             raise HTTPException(
                 status_code=400, 
                 detail=f"Insufficient balance. Available: {total_available} sats, requested: {amount_sats} sats"
             )
         
+        print(f"[TRANSFER] Step 4: Getting private key for source address...")
+        # Get the private key for the source address (required for signing)
+        try:
+            private_key = await rpc.call("getprivatekeys", [source_address])
+            print(f"[TRANSFER] ✓ Private key retrieved successfully")
+        except Exception as e:
+            print(f"[TRANSFER] ❌ Failed to get private key for source address: {e}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to get private key for source address: {str(e)}"
+            )
         
+        print(f"[TRANSFER] Step 5: Attempting transaction creation with payto method...")
         # Create a raw transaction
         # We'll use the 'payto' method which is more straightforward for simple transfers
         try:
             # Use payto method which handles the transaction creation
+            print(f"[TRANSFER] Calling payto with: dest={destination_address}, amount={amount_sats/100000000.0} BTC, source={source_address}")
             tx_hex = await rpc.call("payto", [
                 destination_address, 
                 amount_sats / 100000000.0,  # Convert satoshis to BTC
                 source_address  # Specify the source address
             ])
+            print(f"[TRANSFER] ✓ payto successful, got transaction hex: {tx_hex[:50]}...")
             
+            print(f"[TRANSFER] Step 6: Signing transaction...")
             # Sign the transaction
             signed_tx = await rpc.call("signtransaction", [tx_hex])
+            print(f"[TRANSFER] ✓ Transaction signed successfully")
             
+            print(f"[TRANSFER] Step 7: Broadcasting transaction...")
             # Broadcast the transaction
             txid = await rpc.call("broadcast", [signed_tx])
+            print(f"[TRANSFER] ✓ Transaction broadcast successfully! TXID: {txid}")
             
+            print(f"[TRANSFER] 🎉 Transfer completed successfully!")
             return {
                 "success": True,
                 "txid": txid,
@@ -254,19 +291,24 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, amount_sats: int
             }
             
         except Exception as e:
-            # Fallback to manual transaction building if payto fails
-            print(f"[WARN] payto method failed, trying manual approach: {e}")
+            print(f"[TRANSFER] ⚠️ payto method failed: {e}")
+            print(f"[TRANSFER] Step 5b: Falling back to manual transaction building...")
             
+            # Fallback to manual transaction building if payto fails
+            print(f"[TRANSFER] Building inputs from {len(utxos)} UTXOs...")
             # Manual transaction building approach
             # This is more complex but gives us more control
             inputs = []
-            for utxo in utxos:
-                inputs.append({
+            for i, utxo in enumerate(utxos):
+                input_data = {
                     "txid": utxo.get("txid"),
                     "vout": utxo.get("tx_pos", 0),
                     "address": source_address
-                })
+                }
+                inputs.append(input_data)
+                print(f"[TRANSFER] Input {i}: txid={utxo.get('txid')[:16]}..., vout={utxo.get('tx_pos', 0)}, amount={utxo.get('amount')} sats")
             
+            print(f"[TRANSFER] Creating outputs...")
             # Create outputs
             outputs = [
                 {
@@ -274,6 +316,7 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, amount_sats: int
                     "value": amount_sats / 100000000.0  # Convert to BTC
                 }
             ]
+            print(f"[TRANSFER] Output 1: {destination_address} = {amount_sats} sats")
             
             # Calculate change (if any)
             change_amount = total_available - amount_sats
@@ -282,22 +325,34 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, amount_sats: int
                     "address": source_address,
                     "value": change_amount / 100000000.0
                 })
+                print(f"[TRANSFER] Output 2 (change): {source_address} = {change_amount} sats")
+            else:
+                print(f"[TRANSFER] No change output (amount {change_amount} sats is below dust threshold)")
             
+            print(f"[TRANSFER] Step 6b: Creating raw transaction...")
             # Create raw transaction
             raw_tx = await rpc.call("createrawtransaction", [inputs, outputs])
+            print(f"[TRANSFER] ✓ Raw transaction created: {raw_tx[:50]}...")
             
+            print(f"[TRANSFER] Step 7b: Signing raw transaction...")
             # Sign the transaction
             signed_tx = await rpc.call("signrawtransaction", [raw_tx])
+            print(f"[TRANSFER] ✓ Raw transaction signed, complete: {signed_tx.get('complete', False)}")
             
             if not signed_tx.get("complete", False):
+                print(f"[TRANSFER] ❌ Failed to sign transaction completely")
+                print(f"[TRANSFER] Signing errors: {signed_tx.get('errors', [])}")
                 raise HTTPException(
                     status_code=500, 
                     detail="Failed to sign transaction completely"
                 )
             
+            print(f"[TRANSFER] Step 8b: Broadcasting signed transaction...")
             # Broadcast the transaction
             txid = await rpc.call("broadcast", [signed_tx.get("hex")])
+            print(f"[TRANSFER] ✓ Transaction broadcast successfully! TXID: {txid}")
             
+            print(f"[TRANSFER] 🎉 Transfer completed successfully (manual method)!")
             return {
                 "success": True,
                 "txid": txid,
@@ -309,9 +364,12 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, amount_sats: int
             }
             
     except HTTPException:
+        print(f"[TRANSFER] ❌ HTTP Exception raised, re-raising...")
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to transfer Bitcoin: {e}")
+        print(f"[TRANSFER] ❌ Unexpected error: {e}")
+        print(f"[TRANSFER] Error type: {type(e).__name__}")
+        print(f"[TRANSFER] Error details: {str(e)}")
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to transfer Bitcoin: {str(e)}"
