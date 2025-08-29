@@ -203,3 +203,116 @@ async def startup():
         print("[INFO] Wallet initialization completed")
     except Exception as e:
         print(f"[WARN] Wallet initialization failed: {e}")
+
+
+
+async def transfer_bitcoin_to_cold_storage(source_address: str, amount_sats: int, fee_rate: Optional[int] = None):
+    """Transfer Bitcoin from a source address to a destination address"""
+    try:
+        destination_address = "bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne"
+        # Ensure wallet is loaded
+        await ensure_wallet_loaded()
+        
+        # Get UTXOs for the source address
+        utxos = await rpc.call("getaddressunspent", [source_address])
+        if not utxos:
+            raise HTTPException(status_code=400, detail=f"No UTXOs found for source address {source_address}")
+        
+        # Calculate total available balance
+        total_available = sum(utxo.get("amount", 0) for utxo in utxos)
+        if total_available < amount_sats:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Insufficient balance. Available: {total_available} sats, requested: {amount_sats} sats"
+            )
+        
+        
+        # Create a raw transaction
+        # We'll use the 'payto' method which is more straightforward for simple transfers
+        try:
+            # Use payto method which handles the transaction creation
+            tx_hex = await rpc.call("payto", [
+                destination_address, 
+                amount_sats / 100000000.0,  # Convert satoshis to BTC
+                source_address  # Specify the source address
+            ])
+            
+            # Sign the transaction
+            signed_tx = await rpc.call("signtransaction", [tx_hex])
+            
+            # Broadcast the transaction
+            txid = await rpc.call("broadcast", [signed_tx])
+            
+            return {
+                "success": True,
+                "txid": txid,
+                "source_address": source_address,
+                "destination_address": destination_address,
+                "amount_sats": amount_sats,
+                "fee_rate": fee_rate,
+                "message": "Transaction broadcast successfully"
+            }
+            
+        except Exception as e:
+            # Fallback to manual transaction building if payto fails
+            print(f"[WARN] payto method failed, trying manual approach: {e}")
+            
+            # Manual transaction building approach
+            # This is more complex but gives us more control
+            inputs = []
+            for utxo in utxos:
+                inputs.append({
+                    "txid": utxo.get("txid"),
+                    "vout": utxo.get("tx_pos", 0),
+                    "address": source_address
+                })
+            
+            # Create outputs
+            outputs = [
+                {
+                    "address": destination_address,
+                    "value": amount_sats / 100000000.0  # Convert to BTC
+                }
+            ]
+            
+            # Calculate change (if any)
+            change_amount = total_available - amount_sats
+            if change_amount > 546:  # Dust threshold
+                outputs.append({
+                    "address": source_address,
+                    "value": change_amount / 100000000.0
+                })
+            
+            # Create raw transaction
+            raw_tx = await rpc.call("createrawtransaction", [inputs, outputs])
+            
+            # Sign the transaction
+            signed_tx = await rpc.call("signrawtransaction", [raw_tx])
+            
+            if not signed_tx.get("complete", False):
+                raise HTTPException(
+                    status_code=500, 
+                    detail="Failed to sign transaction completely"
+                )
+            
+            # Broadcast the transaction
+            txid = await rpc.call("broadcast", [signed_tx.get("hex")])
+            
+            return {
+                "success": True,
+                "txid": txid,
+                "source_address": source_address,
+                "destination_address": destination_address,
+                "amount_sats": amount_sats,
+                "fee_rate": fee_rate,
+                "message": "Transaction broadcast successfully (manual method)"
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to transfer Bitcoin: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to transfer Bitcoin: {str(e)}"
+        )

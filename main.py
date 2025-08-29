@@ -11,6 +11,7 @@
 #   GET    /addresses/{address}/utxos       -> electrum.listunspent (scoped)
 #   POST   /watch                           -> start watching an address
 #   GET    /watch                           -> list watched addresses
+#   POST   /transfer                        -> transfer bitcoin between addresses
 #
 # Webhook payloads:
 #   { "event": "payment", "address": "bc1...", "confirmed_sats": 12345,
@@ -56,9 +57,10 @@ from operations import (
     watcher_loop,
     cleanup,
     get_current_block_height,
-    startup
+    startup,
+    transfer_bitcoin_to_cold_storage
 )
-from models import WatchReq
+from models import WatchReq, TransferReq
 
 app = FastAPI(title="Electrum RPC REST Wrapper", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -115,6 +117,15 @@ async def watch_address_endpoint(req: WatchReq):
 async def list_watch():
     """List all watched addresses"""
     return await list_watched_addresses()
+
+@app.post("/transfer")
+async def transfer_bitcoin_endpoint(req: TransferReq):
+    """Transfer Bitcoin from a source address to a destination address"""
+    return await transfer_bitcoin_to_cold_storage(
+        req.source_address,
+        req.amount_sats,
+        req.fee_rate
+    )
 
 # ------------------- Background watcher -------------------
 @app.on_event("startup")

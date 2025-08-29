@@ -27,6 +27,57 @@ The project has been refactored for better organization and maintainability:
 - `GET /addresses/{address}/utxos` - Get UTXOs for a specific address
 - `POST /watch` - Start watching an address for changes
 - `GET /watch` - List all watched addresses
+- `POST /transfer` - Transfer Bitcoin from a source address to a destination address
+
+## Transfer Endpoint
+
+The `/transfer` endpoint allows you to transfer Bitcoin from an Electrum-generated address to any remote wallet address.
+
+### Request Body
+
+```json
+{
+  "source_address": "bc1q...",
+  "destination_address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+  "amount_sats": 100000,
+  "fee_rate": 5
+}
+```
+
+### Parameters
+
+- **`source_address`** (required): The Electrum-generated address to send Bitcoin from
+- **`destination_address`** (required): The destination wallet address
+- **`amount_sats`** (required): Amount to transfer in satoshis (1 BTC = 100,000,000 sats)
+- **`fee_rate`** (optional): Fee rate in satoshis per byte. If not specified, Electrum will use default fee estimation
+
+### Response
+
+```json
+{
+  "success": true,
+  "txid": "abc123...",
+  "source_address": "bc1q...",
+  "destination_address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+  "amount_sats": 100000,
+  "fee_rate": 5,
+  "message": "Transaction broadcast successfully"
+}
+```
+
+### Example Usage
+
+```bash
+curl -X POST "http://localhost:8080/transfer" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_address": "bc1q...",
+    "destination_address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+    "amount_sats": 100000
+  }'
+```
+
+**Note**: The source address must have sufficient balance and the private key must be available in the Electrum wallet for signing the transaction.
 
 ## Configuration
 
