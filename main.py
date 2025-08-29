@@ -123,13 +123,15 @@ async def transfer_bitcoin_endpoint(req: TransferReq):
     """Transfer Bitcoin from a source address to a destination address"""
     print(f"[ENDPOINT] /transfer called with request:")
     print(f"[ENDPOINT]   source_address: {req.source_address}")
+    print(f"[ENDPOINT]   destination_address: {req.destination_address}")
     print(f"[ENDPOINT]   amount_sats: {req.amount_sats}")
     print(f"[ENDPOINT]   fee_rate: {req.fee_rate}")
     
     try:
-        print(f"[ENDPOINT] Calling transfer_bitcoin function...")
+        print(f"[ENDPOINT] Calling transfer_bitcoin_to_cold_storage function...")
         result = await transfer_bitcoin_to_cold_storage(
             req.source_address,
+            req.destination_address,
             req.amount_sats,
             req.fee_rate
         )

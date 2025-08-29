@@ -213,8 +213,7 @@ async def startup():
 
 
 
-async def transfer_bitcoin_to_cold_storage(source_address: str,  amount_sats: int, fee_rate: Optional[int] = None):
-    destination_address = "bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne"
+async def transfer_bitcoin_to_cold_storage(source_address: str, destination_address: str, amount_sats: int, fee_rate: Optional[int] = None):
     """Transfer Bitcoin from a source address to a destination address"""
     print(f"[TRANSFER] Starting transfer: {source_address} -> {destination_address}, amount: {amount_sats} sats, fee_rate: {fee_rate}")
     
@@ -235,7 +234,7 @@ async def transfer_bitcoin_to_cold_storage(source_address: str,  amount_sats: in
         
         print(f"[TRANSFER] Step 3: Calculating total available balance...")
         # Calculate total available balance
-        total_available = sum(utxo.get("value", 0) for utxo in utxos)
+        total_available = sum(utxo.get("amount", 0) for utxo in utxos)
         print(f"[TRANSFER] ✓ Total available: {total_available} sats")
         
         if total_available < amount_sats:
@@ -266,7 +265,8 @@ async def transfer_bitcoin_to_cold_storage(source_address: str,  amount_sats: in
             tx_hex = await rpc.call("payto", [
                 destination_address, 
                 amount_sats / 100000000.0,  # Convert satoshis to BTC
-                source_address  # Specify the source address
+                source_address,  # Specify the source address
+                fee_rate if fee_rate else None  # Add fee parameter
             ])
             print(f"[TRANSFER] ✓ payto successful, got transaction hex: {tx_hex[:50]}...")
             
