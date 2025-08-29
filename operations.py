@@ -213,7 +213,7 @@ async def startup():
 
 
 
-async def transfer_bitcoin(source_address: str, destination_address: str, amount_sats: int, fee_rate: Optional[int] = None):
+async def transfer_bitcoin_to_cold_storage(source_address: str, destination_address: str, amount_sats: int, fee_rate: Optional[int] = None):
     """Transfer Bitcoin from a source address to a destination address"""
     print(f"[TRANSFER] Starting transfer: {source_address} -> {destination_address}, amount: {amount_sats} sats, fee_rate: {fee_rate}")
     
