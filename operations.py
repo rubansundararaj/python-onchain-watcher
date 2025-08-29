@@ -234,7 +234,7 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, destination_addr
         
         print(f"[TRANSFER] Step 3: Calculating total available balance...")
         # Calculate total available balance
-        total_available = sum(utxo.get("amount", 0) for utxo in utxos)
+        total_available = sum(utxo.get("value", 0) for utxo in utxos)
         print(f"[TRANSFER] ✓ Total available: {total_available} sats")
         
         if total_available < amount_sats:
