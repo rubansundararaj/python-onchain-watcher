@@ -266,7 +266,8 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, destination_addr
                 destination_address, 
                 amount_sats / 100000000.0,  # Convert satoshis to BTC
                 source_address,  # Specify the source address
-                fee_rate if fee_rate else None  # Add fee parameter
+                None,  # fee (set to None)
+                fee_rate if fee_rate else None  # feerate (satoshis per byte)
             ])
             print(f"[TRANSFER] ✓ payto successful, got transaction hex: {tx_hex[:50]}...")
             
