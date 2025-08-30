@@ -226,6 +226,7 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, destination_addr
         print(f"[TRANSFER] Step 2: Getting UTXOs for source address {source_address}...")
         # Get UTXOs for the source address
         utxos = await rpc.call("getaddressunspent", [source_address])
+
         print(f"[TRANSFER] ✓ Got UTXOs: {len(utxos) if utxos else 0} UTXOs found")
         
         if not utxos:
@@ -260,18 +261,43 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, destination_addr
         # Manual transaction building approach
         # This gives us complete control over source addresses and UTXOs
         print(f"[TRANSFER] Building inputs from {len(utxos)} UTXOs...")
+        print(f"[TRANSFER] UTXO data structure: {utxos}")
         # Manual transaction building approach
         # This is more complex but gives us more control
         inputs = []
         for i, utxo in enumerate(utxos):
+            print(f"[TRANSFER] Processing UTXO {i}: {utxo}")
+            print(f"[TRANSFER] UTXO type: {type(utxo)}")
+            print(f"[TRANSFER] UTXO keys: {list(utxo.keys()) if utxo else 'None'}")
+            
+            if not utxo:
+                print(f"[TRANSFER] ❌ UTXO {i} is None or empty")
+                continue
+                
+            tx_hash = utxo.get("tx_hash")
+            tx_pos = utxo.get("tx_pos", 0)
+            value = utxo.get("value", 0)
+            
+            if not tx_hash:
+                print(f"[TRANSFER] ❌ UTXO {i} missing tx_hash: {utxo}")
+                continue
+                
             input_data = {
-                "txid": utxo.get("txid"),
-                "vout": utxo.get("tx_pos", 0),
+                "txid": tx_hash,
+                "vout": tx_pos,
                 "address": source_address
             }
             inputs.append(input_data)
-            print(f"[TRANSFER] Input {i}: txid={utxo.get('txid')[:16]}..., vout={utxo.get('tx_pos', 0)}, amount={utxo.get('value')} sats")
+            print(f"[TRANSFER] Input {i}: txid={tx_hash[:16]}..., vout={tx_pos}, amount={value} sats")
         
+        if not inputs:
+            print(f"[TRANSFER] ❌ No valid inputs created from UTXOs")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create valid transaction inputs from UTXOs"
+            )
+            
+        print(f"[TRANSFER] ✓ Created {len(inputs)} valid inputs")
         print(f"[TRANSFER] Creating outputs...")
         # Create outputs
         outputs = [

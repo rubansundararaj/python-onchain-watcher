@@ -122,7 +122,7 @@ curl -u ruban:'InsaneElonTrump' \
 
 Test payto method (Electrum's built-in transfer):"
 curl -u ruban:'InsaneElonTrump' \
-  --data-binary '{"jsonrpc":"2.0","id":1,"method":"payto","params":["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 0.001, "bc1q3ppsy7pwmhfwkudkaupv9rmnsc59al0smzctwf"]}' \"
+  --data-binary '{"jsonrpc":"2.0","id":1,"method":"payto","params":["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 0.001, "bc1q3ppsy7pwmhfwkudkaupv9rmnsc59al0smzctwf"]}' \
   http://127.0.0.1:7777
 
 
@@ -137,14 +137,13 @@ echo "=== Manual Transaction Building Commands ==="
 echo ""
 
 echo "1. Get UTXOs from specific address:"
-echo "curl -u ruban:'InsaneElonTrump' \\"
-echo "  --data-binary '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getaddressunspent\",\"params\":[\"bc1qqysw3y94w3mq8huqxq4ggtzm8w4v5h0w8ypdet\"]}' \\"
-echo "  http://127.0.0.1:7777"
-echo ""
+curl -u ruban:'InsaneElonTrump' \
+ --data-binary '{"jsonrpc":"2.0","id":1"method":"getaddressunspent","params":["bc1qqysw3y94w3mq8huqxq4ggtzm8w4v5h0w8ypdet\"]}' \\"
+ http://127.0.0.1:7777
 
 echo "2. Create raw transaction:"
 echo "curl -u ruban:'InsaneElonTrump' \\"
-echo "  --data-binary '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"createrawtransaction\",\"params\":[[{\"txid\":\"abc123...\",\"vout\":0}],[{\"bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne\":0.00001}]]}' \\"
+echo "  --data-binary '{"jsonrpc":"2.0","id":1,"method":"createrawtransaction","params":[[{"txid":"abc123...","vout":0}],[{"bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne":0.00001}]]}' \"
 echo "  http://127.0.0.1:7777"
 echo ""
 
