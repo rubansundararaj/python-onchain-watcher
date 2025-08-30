@@ -320,9 +320,43 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, destination_addr
             print(f"[TRANSFER] No change output (amount {change_amount} sats is below dust threshold)")
         
         print(f"[TRANSFER] Step 6: Creating raw transaction...")
+        print(f"[TRANSFER] Inputs for createrawtransaction: {inputs}")
+        print(f"[TRANSFER] Outputs for createrawtransaction: {outputs}")
+        
         # Create raw transaction
-        raw_tx = await rpc.call("createrawtransaction", [inputs, outputs])
-        print(f"[TRANSFER] ✓ Raw transaction created: {raw_tx[:50]}...")
+        # Electrum's createrawtransaction expects different format than Bitcoin Core
+        try:
+            raw_tx = await rpc.call("createrawtransaction", [inputs, outputs])
+            print(f"[TRANSFER] ✓ Raw transaction created: {raw_tx[:50]}...")
+        except Exception as e:
+            print(f"[TRANSFER] ❌ createrawtransaction failed: {e}")
+            print(f"[TRANSFER] Error type: {type(e).__name__}")
+            print(f"[TRANSFER] Error details: {str(e)}")
+            print(f"[TRANSFER] Trying alternative format...")
+            
+            # Try alternative format: inputs as list of strings, outputs as dict
+            alt_inputs = [f"{inp['txid']}:{inp['vout']}" for inp in inputs]
+            alt_outputs = {out['address']: out['value'] for out in outputs}
+            
+            print(f"[TRANSFER] Alternative inputs: {alt_inputs}")
+            print(f"[TRANSFER] Alternative outputs: {alt_outputs}")
+            
+            try:
+                raw_tx = await rpc.call("createrawtransaction", [alt_inputs, alt_outputs])
+                print(f"[TRANSFER] ✓ Raw transaction created with alternative format: {raw_tx[:50]}...")
+            except Exception as e2:
+                print(f"[TRANSFER] ❌ Alternative format also failed: {e2}")
+                print(f"[TRANSFER] Trying Bitcoin Core format...")
+                
+                # Try Bitcoin Core format: inputs as list of dicts, outputs as dict
+                btc_inputs = [{"txid": inp['txid'], "vout": inp['vout']} for inp in inputs]
+                btc_outputs = {out['address']: out['value'] for out in outputs}
+                
+                print(f"[TRANSFER] Bitcoin Core inputs: {btc_inputs}")
+                print(f"[TRANSFER] Bitcoin Core outputs: {btc_outputs}")
+                
+                raw_tx = await rpc.call("createrawtransaction", [btc_inputs, btc_outputs])
+                print(f"[TRANSFER] ✓ Raw transaction created with Bitcoin Core format: {raw_tx[:50]}...")
         
         print(f"[TRANSFER] Step 7: Signing raw transaction...")
         # Sign the transaction
