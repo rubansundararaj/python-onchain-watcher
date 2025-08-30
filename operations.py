@@ -256,117 +256,76 @@ async def transfer_bitcoin_to_cold_storage(source_address: str, destination_addr
                 detail=f"Failed to get private key for source address: {str(e)}"
             )
         
-        print(f"[TRANSFER] Step 5: Attempting transaction creation with payto method...")
-        # Create a raw transaction
-        # We'll use the 'payto' method which is more straightforward for simple transfers
-        try:
-            # Use payto method which handles the transaction creation
-            print(f"[TRANSFER] Calling payto with: dest={destination_address}, amount={amount_sats/100000000.0} BTC, source={source_address}")
-            tx_hex = await rpc.call("payto", [
-                destination_address, 
-                amount_sats / 100000000.0,  # Convert satoshis to BTC
-                source_address,  # Specify the source address
-                None,  # fee (set to None)
-                fee_rate if fee_rate else None  # feerate (satoshis per byte)
-            ])
-            print(f"[TRANSFER] ✓ payto successful, got transaction hex: {tx_hex[:50]}...")
-            
-            print(f"[TRANSFER] Step 6: Signing transaction...")
-            # Sign the transaction
-            signed_tx = await rpc.call("signtransaction", [tx_hex])
-            print(f"[TRANSFER] ✓ Transaction signed successfully")
-            
-            print(f"[TRANSFER] Step 7: Broadcasting transaction...")
-            # Broadcast the transaction
-            txid = await rpc.call("broadcast", [signed_tx])
-            print(f"[TRANSFER] ✓ Transaction broadcast successfully! TXID: {txid}")
-            
-            print(f"[TRANSFER] 🎉 Transfer completed successfully!")
-            return {
-                "success": True,
-                "txid": txid,
-                "source_address": source_address,
-                "destination_address": destination_address,
-                "amount_sats": amount_sats,
-                "fee_rate": fee_rate,
-                "message": "Transaction broadcast successfully"
+        print(f"[TRANSFER] Step 5: Building transaction manually...")
+        # Manual transaction building approach
+        # This gives us complete control over source addresses and UTXOs
+        print(f"[TRANSFER] Building inputs from {len(utxos)} UTXOs...")
+        # Manual transaction building approach
+        # This is more complex but gives us more control
+        inputs = []
+        for i, utxo in enumerate(utxos):
+            input_data = {
+                "txid": utxo.get("txid"),
+                "vout": utxo.get("tx_pos", 0),
+                "address": source_address
             }
-            
-        except Exception as e:
-            print(f"[TRANSFER] ⚠️ payto method failed: {e}")
+            inputs.append(input_data)
+            print(f"[TRANSFER] Input {i}: txid={utxo.get('txid')[:16]}..., vout={utxo.get('tx_pos', 0)}, amount={utxo.get('value')} sats")
+        
+        print(f"[TRANSFER] Creating outputs...")
+        # Create outputs
+        outputs = [
+            {
+                "address": destination_address,
+                "value": amount_sats / 100000000.0  # Convert to BTC
+            }
+        ]
+        print(f"[TRANSFER] Output 1: {destination_address} = {amount_sats} sats")
+        
+        # Calculate change (if any)
+        change_amount = total_available - amount_sats
+        if change_amount > 546:  # Dust threshold
+            outputs.append({
+                "address": source_address,
+                "value": change_amount / 100000000.0
+            })
+            print(f"[TRANSFER] Output 2 (change): {source_address} = {change_amount} sats")
+        else:
+            print(f"[TRANSFER] No change output (amount {change_amount} sats is below dust threshold)")
+        
+        print(f"[TRANSFER] Step 6: Creating raw transaction...")
+        # Create raw transaction
+        raw_tx = await rpc.call("createrawtransaction", [inputs, outputs])
+        print(f"[TRANSFER] ✓ Raw transaction created: {raw_tx[:50]}...")
+        
+        print(f"[TRANSFER] Step 7: Signing raw transaction...")
+        # Sign the transaction
+        signed_tx = await rpc.call("signrawtransaction", [raw_tx])
+        print(f"[TRANSFER] ✓ Raw transaction signed, complete: {signed_tx.get('complete', False)}")
+        
+        if not signed_tx.get("complete", False):
+            print(f"[TRANSFER] ❌ Failed to sign transaction completely")
+            print(f"[TRANSFER] Signing errors: {signed_tx.get('errors', [])}")
             raise HTTPException(
                 status_code=500, 
-                detail=f"payto method failed: {str(e)}"
+                detail="Failed to sign transaction completely"
             )
-            
-            # Fallback to manual transaction building if payto fails
-            #print(f"[TRANSFER] Building inputs from {len(utxos)} UTXOs...")
-            # Manual transaction building approach
-            # This is more complex but gives us more control
-            # inputs = []
-            # for i, utxo in enumerate(utxos):
-            #     input_data = {
-            #         "txid": utxo.get("txid"),
-            #         "vout": utxo.get("tx_pos", 0),
-            #         "address": source_address
-            #     }
-            #     inputs.append(input_data)
-            #     print(f"[TRANSFER] Input {i}: txid={utxo.get('txid')[:16]}..., vout={utxo.get('tx_pos', 0)}, amount={utxo.get('amount')} sats")
-            
-            # print(f"[TRANSFER] Creating outputs...")
-            # # Create outputs
-            # outputs = [
-            #     {
-            #         "address": destination_address,
-            #         "value": amount_sats / 100000000.0  # Convert to BTC
-            #     }
-            # ]
-            # print(f"[TRANSFER] Output 1: {destination_address} = {amount_sats} sats")
-            
-            # # Calculate change (if any)
-            # change_amount = total_available - amount_sats
-            # if change_amount > 546:  # Dust threshold
-            #     outputs.append({
-            #         "address": source_address,
-            #         "value": change_amount / 100000000.0
-            #     })
-            #     print(f"[TRANSFER] Output 2 (change): {source_address} = {change_amount} sats")
-            # else:
-            #     print(f"[TRANSFER] No change output (amount {change_amount} sats is below dust threshold)")
-            
-            # print(f"[TRANSFER] Step 6b: Creating raw transaction...")
-            # # Create raw transaction
-            # raw_tx = await rpc.call("createrawtransaction", [inputs, outputs])
-            # print(f"[TRANSFER] ✓ Raw transaction created: {raw_tx[:50]}...")
-            
-            # print(f"[TRANSFER] Step 7b: Signing raw transaction...")
-            # # Sign the transaction
-            # signed_tx = await rpc.call("signrawtransaction", [raw_tx])
-            # print(f"[TRANSFER] ✓ Raw transaction signed, complete: {signed_tx.get('complete', False)}")
-            
-            # if not signed_tx.get("complete", False):
-            #     print(f"[TRANSFER] ❌ Failed to sign transaction completely")
-            #     print(f"[TRANSFER] Signing errors: {signed_tx.get('errors', [])}")
-            #     raise HTTPException(
-            #         status_code=500, 
-            #         detail="Failed to sign transaction completely"
-            #     )
-            
-            # print(f"[TRANSFER] Step 8b: Broadcasting signed transaction...")
-            # # Broadcast the transaction
-            # txid = await rpc.call("broadcast", [signed_tx.get("hex")])
-            # print(f"[TRANSFER] ✓ Transaction broadcast successfully! TXID: {txid}")
-            
-            # print(f"[TRANSFER] 🎉 Transfer completed successfully (manual method)!")
-            # return {
-            #     "success": True,
-            #     "txid": txid,
-            #     "source_address": source_address,
-            #     "destination_address": destination_address,
-            #     "amount_sats": amount_sats,
-            #     "fee_rate": fee_rate,
-            #     "message": "Transaction broadcast successfully (manual method)"
-            # }
+        
+        print(f"[TRANSFER] Step 8: Broadcasting signed transaction...")
+        # Broadcast the transaction
+        txid = await rpc.call("broadcast", [signed_tx.get("hex")])
+        print(f"[TRANSFER] ✓ Transaction broadcast successfully! TXID: {txid}")
+        
+        print(f"[TRANSFER] 🎉 Transfer completed successfully!")
+        return {
+            "success": True,
+            "txid": txid,
+            "source_address": source_address,
+            "destination_address": destination_address,
+            "amount_sats": amount_sats,
+            "fee_rate": fee_rate,
+            "message": "Transaction broadcast successfully"
+        }
             
     except HTTPException:
         print(f"[TRANSFER] ❌ HTTP Exception raised, re-raising...")
