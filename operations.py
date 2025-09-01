@@ -264,8 +264,6 @@ async def get_wallet_balance():
 
 async def transfer_bitcoin_to_cold_storage(fee_rate: Optional[int] = None):
     """Transfer 70% of wallet balance to cold storage address"""
-    print(f"[COLD_STORAGE] Starting cold storage transfer to: {cold_wallet_address}")
-    
     try:
         cold_wallet_address = "bc1q0pspp7zafe6qakrasugxsm49k2vfwa78xyvhnx"
         print(f"[COLD_STORAGE] Step 1: Ensuring wallet is loaded...")
