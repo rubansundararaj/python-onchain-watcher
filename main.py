@@ -12,6 +12,7 @@
 #   POST   /watch                           -> start watching an address
 #   GET    /watch                           -> list watched addresses
 #   POST   /transfer                        -> transfer bitcoin between addresses
+#   GET    /wallet/balance                  -> electrum.getbalance
 #
 # Webhook payloads:
 #   { "event": "payment", "address": "bc1...", "confirmed_sats": 12345,
@@ -58,7 +59,8 @@ from operations import (
     cleanup,
     get_current_block_height,
     startup,
-    transfer_bitcoin_to_cold_storage
+    transfer_bitcoin_to_cold_storage,
+    get_wallet_balance
 )
 from models import WatchReq, TransferReq
 
@@ -128,17 +130,31 @@ async def transfer_bitcoin_endpoint(req: TransferReq):
     print(f"[ENDPOINT]   fee_rate: {req.fee_rate}")
     
     try:
-        print(f"[ENDPOINT] Calling transfer_bitcoin_to_cold_storage function...")
+        print(f"[ENDPOINT] Calling transfer_bitcoin function...")
         result = await transfer_bitcoin_to_cold_storage(
-            req.source_address,
             req.destination_address,
-            req.amount_sats,
             req.fee_rate
         )
         print(f"[ENDPOINT] ✓ Transfer completed successfully, returning result")
         return result
     except Exception as e:
         print(f"[ENDPOINT] ❌ Error in transfer endpoint: {e}")
+        print(f"[ENDPOINT] Error type: {type(e).__name__}")
+        raise
+
+
+@app.get("/wallet/balance")
+async def get_wallet_balance_endpoint():
+    """Get overall wallet balance"""
+    print(f"[ENDPOINT] /wallet/balance called")
+    
+    try:
+        print(f"[ENDPOINT] Calling get_wallet_balance function...")
+        result = await get_wallet_balance()
+        print(f"[ENDPOINT] ✓ Wallet balance retrieved successfully, returning result")
+        return result
+    except Exception as e:
+        print(f"[ENDPOINT] ❌ Error in wallet balance endpoint: {e}")
         print(f"[ENDPOINT] Error type: {type(e).__name__}")
         raise
 

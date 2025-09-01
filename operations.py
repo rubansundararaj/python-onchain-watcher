@@ -213,188 +213,203 @@ async def startup():
 
 
 
-async def transfer_bitcoin_to_cold_storage(source_address: str, destination_address: str, amount_sats: int, fee_rate: Optional[int] = None):
-    """Transfer Bitcoin from a source address to a destination address"""
-    print(f"[TRANSFER] Starting transfer: {source_address} -> {destination_address}, amount: {amount_sats} sats, fee_rate: {fee_rate}")
+async def get_wallet_balance():
+    """Get overall wallet balance"""
+    print(f"[BALANCE] Getting overall wallet balance...")
     
-    try:  
-        print(f"[TRANSFER] Step 1: Ensuring wallet is loaded...")
-        # Ensure wallet is loaded
+    try:
+        print(f"[BALANCE] Step 1: Ensuring wallet is loaded...")
         await ensure_wallet_loaded()
-        print(f"[TRANSFER] ✓ Wallet loaded successfully")
+        print(f"[BALANCE] ✓ Wallet loaded successfully")
         
-        print(f"[TRANSFER] Step 2: Getting UTXOs for source address {source_address}...")
-        # Get UTXOs for the source address
-        utxos = await rpc.call("getaddressunspent", [source_address])
-
-        print(f"[TRANSFER] ✓ Got UTXOs: {len(utxos) if utxos else 0} UTXOs found")
+        print(f"[BALANCE] Step 2: Getting wallet balance...")
+        balance = await rpc.call("getbalance")
+        print(f"[BALANCE] ✓ Got balance: {balance}")
         
-        if not utxos:
-            print(f"[TRANSFER] ❌ No UTXOs found for source address {source_address}")
-            raise HTTPException(status_code=400, detail=f"No UTXOs found for source address {source_address}")
+        # Parse the balance response
+        confirmed_balance = balance.get("confirmed", "0")
+        unconfirmed_balance = balance.get("unconfirmed", "0")
         
-        print(f"[TRANSFER] Step 3: Calculating total available balance...")
-        # Calculate total available balance
-        total_available = sum(utxo.get("value", 0) for utxo in utxos)
-        print(f"[TRANSFER] ✓ Total available: {total_available} sats")
+        # Convert to satoshis for consistency
+        confirmed_sats = int(float(confirmed_balance) * 100000000)
+        unconfirmed_sats = int(float(unconfirmed_balance) * 100000000)
+        total_sats = confirmed_sats + unconfirmed_sats
         
-        if total_available < amount_sats:
-            print(f"[TRANSFER] ❌ Insufficient balance. Available: {total_available} sats, requested: {amount_sats} sats")
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Insufficient balance. Available: {total_available} sats, requested: {amount_sats} sats"
-            )
+        print(f"[BALANCE] ✓ Balance parsed successfully")
+        print(f"[BALANCE]   Confirmed: {confirmed_sats} sats ({confirmed_balance} BTC)")
+        print(f"[BALANCE]   Unconfirmed: {unconfirmed_sats} sats ({unconfirmed_balance} BTC)")
+        print(f"[BALANCE]   Total: {total_sats} sats ({float(confirmed_balance) + float(unconfirmed_balance)} BTC)")
         
-        print(f"[TRANSFER] Step 4: Getting private key for source address...")
-        # Get the private key for the source address (required for signing)
-        try:
-            await rpc.call("getprivatekeys", [source_address])
-            print(f"[TRANSFER] ✓ Private key retrieved successfully")
-        except Exception as e:
-            print(f"[TRANSFER] ❌ Failed to get private key for source address: {e}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to get private key for source address: {str(e)}"
-            )
-        
-        print(f"[TRANSFER] Step 5: Building transaction manually...")
-        # Manual transaction building approach
-        # This gives us complete control over source addresses and UTXOs
-        print(f"[TRANSFER] Building inputs from {len(utxos)} UTXOs...")
-        print(f"[TRANSFER] UTXO data structure: {utxos}")
-        # Manual transaction building approach
-        # This is more complex but gives us more control
-        inputs = []
-        for i, utxo in enumerate(utxos):
-            print(f"[TRANSFER] Processing UTXO {i}: {utxo}")
-            print(f"[TRANSFER] UTXO type: {type(utxo)}")
-            print(f"[TRANSFER] UTXO keys: {list(utxo.keys()) if utxo else 'None'}")
-            
-            if not utxo:
-                print(f"[TRANSFER] ❌ UTXO {i} is None or empty")
-                continue
-                
-            tx_hash = utxo.get("tx_hash")
-            tx_pos = utxo.get("tx_pos", 0)
-            value = utxo.get("value", 0)
-            
-            if not tx_hash:
-                print(f"[TRANSFER] ❌ UTXO {i} missing tx_hash: {utxo}")
-                continue
-                
-            input_data = {
-                "txid": tx_hash,
-                "vout": tx_pos,
-                "address": source_address
-            }
-            inputs.append(input_data)
-            print(f"[TRANSFER] Input {i}: txid={tx_hash[:16]}..., vout={tx_pos}, amount={value} sats")
-        
-        if not inputs:
-            print(f"[TRANSFER] ❌ No valid inputs created from UTXOs")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to create valid transaction inputs from UTXOs"
-            )
-            
-        print(f"[TRANSFER] ✓ Created {len(inputs)} valid inputs")
-        print(f"[TRANSFER] Creating outputs...")
-        # Create outputs
-        outputs = [
-            {
-                "address": destination_address,
-                "value": amount_sats / 100000000.0  # Convert to BTC
-            }
-        ]
-        print(f"[TRANSFER] Output 1: {destination_address} = {amount_sats} sats")
-        
-        # Calculate change (if any)
-        change_amount = total_available - amount_sats
-        if change_amount > 546:  # Dust threshold
-            outputs.append({
-                "address": source_address,
-                "value": change_amount / 100000000.0
-            })
-            print(f"[TRANSFER] Output 2 (change): {source_address} = {change_amount} sats")
-        else:
-            print(f"[TRANSFER] No change output (amount {change_amount} sats is below dust threshold)")
-        
-        print(f"[TRANSFER] Step 6: Creating raw transaction...")
-        print(f"[TRANSFER] Inputs for createrawtransaction: {inputs}")
-        print(f"[TRANSFER] Outputs for createrawtransaction: {outputs}")
-        
-        # Create raw transaction
-        # Electrum's createrawtransaction expects different format than Bitcoin Core
-        try:
-            raw_tx = await rpc.call("createrawtransaction", [inputs, outputs])
-            print(f"[TRANSFER] ✓ Raw transaction created: {raw_tx[:50]}...")
-        except Exception as e:
-            print(f"[TRANSFER] ❌ createrawtransaction failed: {e}")
-            print(f"[TRANSFER] Error type: {type(e).__name__}")
-            print(f"[TRANSFER] Error details: {str(e)}")
-            print(f"[TRANSFER] Trying alternative format...")
-            
-            # Try alternative format: inputs as list of strings, outputs as dict
-            alt_inputs = [f"{inp['txid']}:{inp['vout']}" for inp in inputs]
-            alt_outputs = {out['address']: out['value'] for out in outputs}
-            
-            print(f"[TRANSFER] Alternative inputs: {alt_inputs}")
-            print(f"[TRANSFER] Alternative outputs: {alt_outputs}")
-            
-            try:
-                raw_tx = await rpc.call("createrawtransaction", [alt_inputs, alt_outputs])
-                print(f"[TRANSFER] ✓ Raw transaction created with alternative format: {raw_tx[:50]}...")
-            except Exception as e2:
-                print(f"[TRANSFER] ❌ Alternative format also failed: {e2}")
-                print(f"[TRANSFER] Trying Bitcoin Core format...")
-                
-                # Try Bitcoin Core format: inputs as list of dicts, outputs as dict
-                btc_inputs = [{"txid": inp['txid'], "vout": inp['vout']} for inp in inputs]
-                btc_outputs = {out['address']: out['value'] for out in outputs}
-                
-                print(f"[TRANSFER] Bitcoin Core inputs: {btc_inputs}")
-                print(f"[TRANSFER] Bitcoin Core outputs: {btc_outputs}")
-                
-                raw_tx = await rpc.call("createrawtransaction", [btc_inputs, btc_outputs])
-                print(f"[TRANSFER] ✓ Raw transaction created with Bitcoin Core format: {raw_tx[:50]}...")
-        
-        print(f"[TRANSFER] Step 7: Signing raw transaction...")
-        # Sign the transaction
-        signed_tx = await rpc.call("signrawtransaction", [raw_tx])
-        print(f"[TRANSFER] ✓ Raw transaction signed, complete: {signed_tx.get('complete', False)}")
-        
-        if not signed_tx.get("complete", False):
-            print(f"[TRANSFER] ❌ Failed to sign transaction completely")
-            print(f"[TRANSFER] Signing errors: {signed_tx.get('errors', [])}")
-            raise HTTPException(
-                status_code=500, 
-                detail="Failed to sign transaction completely"
-            )
-        
-        print(f"[TRANSFER] Step 8: Broadcasting signed transaction...")
-        # Broadcast the transaction
-        txid = await rpc.call("broadcast", [signed_tx.get("hex")])
-        print(f"[TRANSFER] ✓ Transaction broadcast successfully! TXID: {txid}")
-        
-        print(f"[TRANSFER] 🎉 Transfer completed successfully!")
         return {
             "success": True,
-            "txid": txid,
-            "source_address": source_address,
-            "destination_address": destination_address,
-            "amount_sats": amount_sats,
-            "fee_rate": fee_rate,
-            "message": "Transaction broadcast successfully"
+            "balance": {
+                "confirmed_btc": confirmed_balance,
+                "unconfirmed_btc": unconfirmed_balance,
+                "total_btc": str(float(confirmed_balance) + float(unconfirmed_balance)),
+                "confirmed_sats": confirmed_sats,
+                "unconfirmed_sats": unconfirmed_sats,
+                "total_sats": total_sats
+            },
+            "message": "Wallet balance retrieved successfully"
         }
+        
+    except Exception as e:
+        print(f"[BALANCE] ❌ Error getting wallet balance: {e}")
+        print(f"[BALANCE] Error type: {type(e).__name__}")
+        print(f"[BALANCE] Error details: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get wallet balance: {str(e)}"
+        )
+
+async def transfer_bitcoin_to_cold_storage(fee_rate: Optional[int] = None):
+    """Transfer 70% of wallet balance to cold storage address"""
+    print(f"[COLD_STORAGE] Starting cold storage transfer to: {cold_wallet_address}")
+    
+    try:
+        cold_wallet_address = "bc1q0pspp7zafe6qakrasugxsm49k2vfwa78xyvhnx"
+        print(f"[COLD_STORAGE] Step 1: Ensuring wallet is loaded...")
+        await ensure_wallet_loaded()
+        print(f"[COLD_STORAGE] ✓ Wallet loaded successfully")
+        
+        print(f"[COLD_STORAGE] Step 2: Getting overall wallet balance...")
+        # Get the overall wallet balance
+        balance_response = await rpc.call("getbalance")
+        print(f"[COLD_STORAGE] ✓ Got balance response: {balance_response}")
+        
+        # Parse the balance
+        confirmed_balance = balance_response.get("confirmed", "0")
+        unconfirmed_balance = balance_response.get("unconfirmed", "0")
+        
+        # Convert to satoshis
+        confirmed_sats = int(float(confirmed_balance) * 100000000)
+        unconfirmed_sats = int(float(unconfirmed_balance) * 100000000)
+        total_sats = confirmed_sats + unconfirmed_sats
+        
+        print(f"[COLD_STORAGE] ✓ Balance parsed:")
+        print(f"[COLD_STORAGE]   Confirmed: {confirmed_sats} sats ({confirmed_balance} BTC)")
+        print(f"[COLD_STORAGE]   Unconfirmed: {unconfirmed_sats} sats ({unconfirmed_balance} BTC)")
+        print(f"[COLD_STORAGE]   Total: {total_sats} sats")
+        
+        if total_sats == 0:
+            print(f"[COLD_STORAGE] ❌ No funds available for transfer")
+            raise HTTPException(
+                status_code=400,
+                detail="No funds available in wallet for cold storage transfer"
+            )
+        
+        # Calculate 70% of total balance
+        transfer_amount_sats = int(total_sats * 0.7)
+        print(f"[COLD_STORAGE] Step 3: Calculating transfer amount...")
+        print(f"[COLD_STORAGE] ✓ Transfer amount: {transfer_amount_sats} sats (70% of {total_sats} sats)")
+        
+        # Check if we have enough confirmed balance for the transfer
+        if confirmed_sats < transfer_amount_sats:
+            print(f"[COLD_STORAGE] ⚠️ Warning: Not enough confirmed balance for full transfer")
+            print(f"[COLD_STORAGE]   Confirmed: {confirmed_sats} sats, Required: {transfer_amount_sats} sats")
+            print(f"[COLD_STORAGE]   Using available confirmed balance instead")
+            transfer_amount_sats = confirmed_sats
+        
+        if transfer_amount_sats < 1000:  # Minimum 1000 sats (dust threshold)
+            print(f"[COLD_STORAGE] ❌ Transfer amount too small: {transfer_amount_sats} sats")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Transfer amount too small: {transfer_amount_sats} sats (minimum 1000 sats)"
+            )
+        
+        print(f"[COLD_STORAGE] Step 4: Using payto method for transfer...")
+        print(f"[COLD_STORAGE]   Destination: {cold_wallet_address}")
+        print(f"[COLD_STORAGE]   Amount: {transfer_amount_sats} sats ({transfer_amount_sats / 100000000.0} BTC)")
+        print(f"[COLD_STORAGE]   Fee rate: {fee_rate}")
+        
+        # Use payto method to create the transaction
+        # Convert satoshis to BTC for payto
+        amount_btc = transfer_amount_sats / 100000000.0
+        
+        try:
+            # Create the transaction using payto
+            if fee_rate:
+                tx_hex = await rpc.call("payto", [cold_wallet_address, amount_btc, None, fee_rate])
+                print(f"[COLD_STORAGE] ✓ payto successful with fee_rate {fee_rate}, got transaction hex: {tx_hex[:50]}...")
+            else:
+                tx_hex = await rpc.call("payto", [cold_wallet_address, amount_btc])
+                print(f"[COLD_STORAGE] ✓ payto successful with default fee, got transaction hex: {tx_hex[:50]}...")
+            
+            print(f"[COLD_STORAGE] Step 5: Signing transaction...")
+            # Sign the transaction
+            signed_tx = await rpc.call("signtransaction", [tx_hex])
+            print(f"[COLD_STORAGE] ✓ Transaction signed successfully")
+            
+            print(f"[COLD_STORAGE] Step 6: Broadcasting transaction...")
+            # Broadcast the transaction
+            txid = await rpc.call("broadcast", [signed_tx])
+            print(f"[COLD_STORAGE] ✓ Transaction broadcast successfully! TXID: {txid}")
+            
+            print(f"[COLD_STORAGE] 🎉 Cold storage transfer completed successfully!")
+            return {
+                "success": True,
+                "txid": txid,
+                "cold_wallet_address": cold_wallet_address,
+                "transfer_amount_sats": transfer_amount_sats,
+                "transfer_amount_btc": amount_btc,
+                "original_balance_sats": total_sats,
+                "original_balance_btc": float(confirmed_balance) + float(unconfirmed_balance),
+                "fee_rate": fee_rate,
+                "message": f"Successfully transferred {transfer_amount_sats} sats ({amount_btc} BTC) to cold storage"
+            }
+            
+        except Exception as payto_error:
+            print(f"[COLD_STORAGE] ❌ payto method failed: {payto_error}")
+            print(f"[COLD_STORAGE] Error type: {type(payto_error).__name__}")
+            print(f"[COLD_STORAGE] Error details: {str(payto_error)}")
+            
+            # Fallback: Try paytomany method
+            print(f"[COLD_STORAGE] Trying fallback with paytomany...")
+            try:
+                # Use paytomany with the cold wallet as destination
+                paytomany_outputs = {
+                    cold_wallet_address: amount_btc
+                }
+                
+                if fee_rate:
+                    tx_hex = await rpc.call("paytomany", [paytomany_outputs, None, fee_rate])
+                    print(f"[COLD_STORAGE] ✓ paytomany successful with fee_rate {fee_rate}: {tx_hex[:50]}...")
+                else:
+                    tx_hex = await rpc.call("paytomany", [paytomany_outputs])
+                    print(f"[COLD_STORAGE] ✓ paytomany successful with default fee: {tx_hex[:50]}...")
+                
+                # Broadcast directly (paytomany already signs)
+                txid = await rpc.call("broadcast", [tx_hex])
+                print(f"[COLD_STORAGE] ✓ Transaction broadcast successfully! TXID: {txid}")
+                
+                print(f"[COLD_STORAGE] 🎉 Cold storage transfer completed with paytomany!")
+                return {
+                    "success": True,
+                    "txid": txid,
+                    "cold_wallet_address": cold_wallet_address,
+                    "transfer_amount_sats": transfer_amount_sats,
+                    "transfer_amount_btc": amount_btc,
+                    "original_balance_sats": total_sats,
+                    "original_balance_btc": float(confirmed_balance) + float(unconfirmed_balance),
+                    "fee_rate": fee_rate,
+                    "message": f"Successfully transferred {transfer_amount_sats} sats ({amount_btc} BTC) to cold storage using paytomany"
+                }
+                
+            except Exception as paytomany_error:
+                print(f"[COLD_STORAGE] ❌ paytomany also failed: {paytomany_error}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Both payto and paytomany methods failed. payto: {str(payto_error)}, paytomany: {str(paytomany_error)}"
+                )
             
     except HTTPException:
-        print(f"[TRANSFER] ❌ HTTP Exception raised, re-raising...")
+        print(f"[COLD_STORAGE] ❌ HTTP Exception raised, re-raising...")
         raise
     except Exception as e:
-        print(f"[TRANSFER] ❌ Unexpected error: {e}")
-        print(f"[TRANSFER] Error type: {type(e).__name__}")
-        print(f"[TRANSFER] Error details: {str(e)}")
+        print(f"[COLD_STORAGE] ❌ Unexpected error: {e}")
+        print(f"[COLD_STORAGE] Error type: {type(e).__name__}")
+        print(f"[COLD_STORAGE] Error details: {str(e)}")
         raise HTTPException(
             status_code=500, 
-            detail=f"Failed to transfer Bitcoin: {str(e)}"
+            detail=f"Failed to transfer to cold storage: {str(e)}"
         )

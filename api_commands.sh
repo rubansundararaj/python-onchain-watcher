@@ -63,6 +63,22 @@ curl -X POST \"http://localhost:8000/transfer\" \\"
   -d '{\"source_address\": \"bc1q3ppsy7pwmhfwkudkaupv9rmnsc59al0smzctwf\", \"destination_address\": \"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\", \"amount_sats\": 100000, \"fee_rate\": 5}'"
 "
 
+13. Get Overall Wallet Balance:"
+curl -X GET \"http://localhost:8000/wallet/balance\""
+"
+
+14. Transfer 70% to Cold Storage:"
+curl -X POST \"http://localhost:8000/cold-storage\" \\
+  -H \"Content-Type: application/json\" \\
+  -d '{\"cold_wallet_address\": \"bc1qgapvnn6vpyr37adaekxphyhrquqn386nzf2r6z\"}'"
+"
+
+15. Transfer 70% to Cold Storage with Custom Fee Rate:"
+curl -X POST \"http://localhost:8000/cold-storage\" \\
+  -H \"Content-Type: application/json\" \\
+  -d '{\"cold_wallet_address\": \"bc1qgapvnn6vpyr37adaekxphyhrquqn386nzf2r6z\", \"fee_rate\": 5}'"
+"
+
 === Example Bitcoin Addresses for Testing ==="
 Testnet: tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
 Mainnet: bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
@@ -115,6 +131,11 @@ curl -u ruban:'InsaneElonTrump' \
   --data-binary '{"jsonrpc":"2.0","id":1,"method":"getaddressbalance","params":["bc1qrnrdpceunnkj6j8h9whw7n52uq8she4ne5n9y5"]}' \
   http://127.0.0.1:7777 
 
+Get overall wallet balance:"
+curl -u ruban:'InsaneElonTrump' \
+  --data-binary '{"jsonrpc":"2.0","id":1,"method":"getbalance"}' \
+  http://127.0.0.1:7777 
+
 Get address UTXOs (check available funds):"
 curl -u ruban:'InsaneElonTrump' \
   --data-binary '{"jsonrpc":"2.0","id":1,"method":"getaddressunspent","params":["bc1qrnrdpceunnkj6j8h9whw7n52uq8she4ne5n9y5"]}' \
@@ -122,7 +143,7 @@ curl -u ruban:'InsaneElonTrump' \
 
 Test payto method (Electrum's built-in transfer):"
 curl -u ruban:'InsaneElonTrump' \
-  --data-binary '{"jsonrpc":"2.0","id":1,"method":"payto","params":["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 0.001, "bc1q3ppsy7pwmhfwkudkaupv9rmnsc59al0smzctwf"]}' \
+  --data-binary '{"jsonrpc":"2.0","id":1,"method":"payto","params":["bc1qgapvnn6vpyr37adaekxphyhrquqn386nzf2r6z", 0.00001]}' \
   http://127.0.0.1:7777
 
 
@@ -170,3 +191,46 @@ echo "curl -X POST http://localhost:8000/transfer \\"
 echo "  -H \"Content-Type: application/json\" \\"
 echo "  -d '{\"source_address\":\"bc1qqysw3y94w3mq8huqxq4ggtzm8w4v5h0w8ypdet\",\"destination_address\":\"bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne\",\"amount_sats\":1000}'"
 echo ""
+
+echo "7d. Test with just the basic transaction (no change):"
+echo "curl -u ruban:'InsaneElonTrump' \\"
+echo "  --data-binary '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"createrawtransaction\",\"params\":[[{\"txid\":\"bee52c6957e3276702ad2a9290b26fd5844821b216156d9c1608a82cb0c7ad0e\",\"vout\":1}],{\"bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne\":1e-05}]}' \\"
+echo "  http://127.0.0.1:7777"
+echo ""
+
+echo "8. Check what RPC methods are available in Electrum:"
+echo "curl -u ruban:'InsaneElonTrump' \\"
+echo "  --data-binary '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"help\"}' \\"
+echo "  http://127.0.0.1:7777"
+echo ""
+
+echo "9. Test alternative transaction creation methods:"
+echo ""
+
+echo "9a. Try paytomany (Electrum's preferred method):"
+echo "curl -u ruban:'InsaneElonTrump' \\"
+echo "  --data-binary '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"paytomany\",\"params\":[{\"bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne\":1e-05,\"bc1qqysw3y94w3mq8huqxq4ggtzm8w4v5h0w8ypdet\":4e-05}]}' \\"
+echo "  http://127.0.0.1:7777"
+echo ""
+
+echo "9b. Try payto with specific source (if supported):"
+echo "curl -u ruban:'InsaneElonTrump' \\"
+echo "  --data-binary '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"payto\",\"params\":[\"bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne\",1e-05]}' \\"
+echo "  http://127.0.0.1:7777"
+echo ""
+
+echo "9c. Check if we can freeze specific addresses to control spending:"
+echo "curl -u ruban:'InsaneElonTrump' \\"
+echo "  --data-binary '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"freeze\",\"params\":[\"bc1qqysw3y94w3mq8huqxq4ggtzm8w4v5h0w8ypdet\"]}' \\"
+echo "  http://127.0.0.1:7777"
+echo ""
+
+echo "9d. Unfreeze the address:"
+echo "curl -u ruban:'InsaneElonTrump' \\"
+echo "  --data-binary '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"freeze\",\"params\":[\"bc1qqysw3y94w3mq8huqxq4ggtzm8w4v5h0w8ypdet\"]}' \\"
+echo "  http://127.0.0.1:7777"
+echo ""
+
+
+
+020000000001010eadc7b02ca808169c6d1516b2214884d56fb290922aad026727e357692ce5be0100000000fdffffff02e8030000000000001600144742c9cf4c09071f75bdcd8c1b92e30701389f53d80e000000000000160014e43c47ce49ab6e4d55ba513390df4dd4a71c33670247304402202427ed75ababe14c51bdfd39b640b820010c3fa6906ca4b94d1a4248dacc04eb02202444e3206361bd9652a8f858466397921ccec6b353a8e48cdbf437e9dab200470121032b064a42f57925e0938e54d14abd4558c4a1ad8ab541f5a1ed78782c6b99a1071bed0d00

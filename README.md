@@ -28,6 +28,8 @@ The project has been refactored for better organization and maintainability:
 - `POST /watch` - Start watching an address for changes
 - `GET /watch` - List all watched addresses
 - `POST /transfer` - Transfer Bitcoin from a source address to a destination address
+- `POST /cold-storage` - Transfer 70% of wallet balance to cold storage address
+- `GET /wallet/balance` - Get overall wallet balance
 
 ## Transfer Endpoint
 
@@ -78,6 +80,94 @@ curl -X POST "http://localhost:8080/transfer" \
 ```
 
 **Note**: The source address must have sufficient balance and the private key must be available in the Electrum wallet for signing the transaction.
+
+## Cold Storage Endpoint
+
+The `/cold-storage` endpoint automatically transfers 70% of the wallet's total balance to a specified cold storage address. This is useful for automated cold storage management.
+
+### Request Body
+
+```json
+{
+  "cold_wallet_address": "bc1q...",
+  "fee_rate": 5
+}
+```
+
+### Parameters
+
+- **`cold_wallet_address`** (required): The cold storage wallet address to transfer funds to
+- **`fee_rate`** (optional): Fee rate in satoshis per byte
+
+### Response Format
+
+```json
+{
+  "success": true,
+  "txid": "abc123...",
+  "cold_wallet_address": "bc1q...",
+  "transfer_amount_sats": 38500,
+  "transfer_amount_btc": 0.000385,
+  "original_balance_sats": 55000,
+  "original_balance_btc": 0.00055,
+  "fee_rate": 5,
+  "message": "Successfully transferred 38500 sats (0.000385 BTC) to cold storage"
+}
+```
+
+### Example Usage
+
+```bash
+curl -X POST "http://localhost:8080/cold-storage" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cold_wallet_address": "bc1qgapvnn6vpyr37adaekxphyhrquqn386nzf2r6z"
+  }'
+```
+
+### Features
+
+- **Automatic Balance Calculation**: Gets the current wallet balance and calculates 70%
+- **Smart Balance Handling**: Uses confirmed balance if insufficient for full 70% transfer
+- **Minimum Amount Check**: Ensures transfer amount is above dust threshold (1000 sats)
+- **Fallback Methods**: Uses `payto` first, falls back to `paytomany` if needed
+- **Comprehensive Logging**: Detailed logs for debugging and monitoring
+
+## Wallet Balance Endpoint
+
+The `/wallet/balance` endpoint provides the overall wallet balance including both confirmed and unconfirmed funds.
+
+### Response Format
+
+```json
+{
+  "success": true,
+  "balance": {
+    "confirmed_btc": "0.00005501",
+    "unconfirmed_btc": "0.0",
+    "total_btc": "0.00005501",
+    "confirmed_sats": 5501,
+    "unconfirmed_sats": 0,
+    "total_sats": 5501
+  },
+  "message": "Wallet balance retrieved successfully"
+}
+```
+
+### Example Usage
+
+```bash
+curl -X GET "http://localhost:8080/wallet/balance"
+```
+
+### Response Fields
+
+- **`confirmed_btc`**: Confirmed balance in BTC (string format)
+- **`unconfirmed_btc`**: Unconfirmed balance in BTC (string format)  
+- **`total_btc`**: Total balance in BTC (string format)
+- **`confirmed_sats`**: Confirmed balance in satoshis (integer)
+- **`unconfirmed_sats`**: Unconfirmed balance in satoshis (integer)
+- **`total_sats`**: Total balance in satoshis (integer)
 
 ## Configuration
 
