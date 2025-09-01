@@ -1,6 +1,6 @@
 sudo systemctl daemon-reload  
 sudo systemctl start onchain-watcher
-sudo systemctl status onchain-watcher -l
+sudo systemctl status onchain-watcher
 
 # Additional logging and monitoring commands
 sudo journalctl -u onchain-watcher -f                    # Follow logs in real-time
