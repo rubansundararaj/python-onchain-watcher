@@ -97,13 +97,13 @@ async def ensure_wallet_loaded(wallet_name: str):
                     )
                 else:
                     # Create regular wallet
-                    await rpc.call("create", [wallet_name])
+                    await rpc.call("create", {"wallet_path": wallet_name})
                     print(f"[WALLET] ✓ Created wallet: {wallet_name}")
             
             # Load the wallet
             try:
                 print(f"[WALLET] Loading wallet: {wallet_name}")
-                await rpc.call("load_wallet", [wallet_name, None])
+                await rpc.call("load_wallet", {"wallet_path": wallet_name, "password": None})
                 print(f"[WALLET] ✓ Wallet loaded successfully")
                 
                 # If it's the withdrawal wallet, try to unlock it if it's encrypted
@@ -134,7 +134,7 @@ async def create_secure_withdrawal_wallet():
         
         # Create the wallet with encryption enabled
         print(f"[SECURE_WALLET] Creating encrypted wallet...")
-        await rpc.call("create", [WITHDRAWAL_WALLET_NAME, password, True])
+        await rpc.call("create", {"wallet_path": WITHDRAWAL_WALLET_NAME, "password": password, "encrypt_file": True})
         
         # Set proper file permissions (readable only by owner)
         import os
@@ -178,7 +178,7 @@ async def unlock_withdrawal_wallet_if_needed():
         
         # Try to unlock the wallet
         try:
-            await rpc.call("password", [password])
+            await rpc.call("password", {"password": password})
             print(f"[UNLOCK] ✓ Withdrawal wallet unlocked successfully")
         except Exception as unlock_error:
             print(f"[UNLOCK] ⚠️ Wallet unlock attempt: {unlock_error}")
