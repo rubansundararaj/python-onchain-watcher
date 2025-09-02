@@ -210,6 +210,24 @@ async def get_withdrawal_balance():
         print(f"[ENDPOINT] Error type: {type(e).__name__}")
         raise
 
+
+@app.get("/withdraw/balance")
+async def get_withdrawal_balance():
+    """Get withdrawal wallet balance"""
+    print(f"[ENDPOINT] /withdraw/balance called")
+    
+    try:
+        print(f"[ENDPOINT] Calling get_wallet_balance function for withdrawal wallet...")
+        result = await get_wallet_balance("withdrawal")
+        print(f"[ENDPOINT] ✓ Withdrawal wallet balance retrieved successfully")
+        return {"wallet": WITHDRAWAL_WALLET_NAME, "balance": result}
+    except Exception as e:
+        print(f"[ENDPOINT] ❌ Error in withdrawal balance endpoint: {e}")
+        print(f"[ENDPOINT] Error type: {type(e).__name__}")
+        raise
+
+
+
 @app.post("/withdraw/address")
 async def create_withdrawal_address():
     """Create a new withdrawal address for users to receive funds"""
