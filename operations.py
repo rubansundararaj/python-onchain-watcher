@@ -55,7 +55,7 @@ WITHDRAWAL_WALLET_NAME = "withdrawal_wallet"
 
 # ------------------- Operations -------------------
 async def ensure_wallet_loaded(wallet_name: str):
-    """Ensure the specified wallet is loaded"""
+    """Ensure the specified wallet is loaded - always unload current wallet and load requested one"""
     global _current_wallet
     
     # If the correct wallet is already loaded, return immediately
@@ -70,11 +70,11 @@ async def ensure_wallet_loaded(wallet_name: str):
             print(f"[WALLET] Wallet '{wallet_name}' loaded by another call, skipping...")
             return
             
-        print(f"[WALLET] Ensuring wallet '{wallet_name}' is loaded...")
+        print(f"[WALLET] Loading wallet '{wallet_name}'...")
         try:
-            # If a different wallet is currently loaded, unload it first
-            if _current_wallet and _current_wallet != wallet_name:
-                print(f"[WALLET] Unloading current wallet '{_current_wallet}' before loading '{wallet_name}'...")
+            # Always unload any currently loaded wallet first
+            if _current_wallet:
+                print(f"[WALLET] Unloading current wallet '{_current_wallet}'...")
                 try:
                     await rpc.call("close_wallet", {})
                     print(f"[WALLET] ✓ Unloaded wallet '{_current_wallet}'")
@@ -82,18 +82,15 @@ async def ensure_wallet_loaded(wallet_name: str):
                     print(f"[WALLET] ⚠️ Warning: Failed to unload wallet '{_current_wallet}': {unload_error}")
                     # Continue anyway, as the new wallet load might still work
             
-            # Check if wallet exists
-            print("[WALLET] Checking for existing wallets...")
-            wallets = await rpc.call("list_wallets")
-            print(f"[WALLET] Found wallets: {wallets}")
+            # Check if wallet file exists on disk
+            import os
+            wallet_file_path = f"/root/.electrum/wallets/{wallet_name}"
+            wallet_exists_on_disk = os.path.exists(wallet_file_path)
+            print(f"[WALLET] Wallet file exists on disk: {wallet_exists_on_disk} at {wallet_file_path}")
             
-            # Extract wallet names from the wallet objects
-            wallet_names = [wallet.get('path', '').split('/')[-1] for wallet in wallets]
-            print(f"[WALLET] Wallet names found: {wallet_names}")
-            
-            if wallet_name not in wallet_names:
-                # Wallet doesn't exist, create it securely
-                print(f"[WALLET] Wallet not found, creating: {wallet_name}")
+            # Create wallet if it doesn't exist on disk
+            if not wallet_exists_on_disk:
+                print(f"[WALLET] Wallet not found on disk, creating: {wallet_name}")
                 
                 if wallet_name == WITHDRAWAL_WALLET_NAME:
                     # Create withdrawal wallet with enhanced security
@@ -110,24 +107,19 @@ async def ensure_wallet_loaded(wallet_name: str):
                     await rpc.call("create", {"wallet_path": wallet_name})
                     print(f"[WALLET] ✓ Created wallet: {wallet_name}")
             else:
-                # Wallet exists, just log it
-                print(f"[WALLET] ✓ Wallet '{wallet_name}' already exists, skipping creation")
+                print(f"[WALLET] ✓ Wallet '{wallet_name}' exists on disk, skipping creation")
             
             # Load the wallet
-            try:
-                print(f"[WALLET] Loading wallet: {wallet_name}")
-                await rpc.call("load_wallet", {"wallet_path": wallet_name, "password": None})
-                print(f"[WALLET] ✓ Wallet loaded successfully")
-                
-                # If it's the withdrawal wallet, try to unlock it if it's encrypted
-                if wallet_name == WITHDRAWAL_WALLET_NAME:
-                    await unlock_withdrawal_wallet_if_needed()
-                
-                _current_wallet = wallet_name
-            except Exception as e:
-                # Wallet might already be loaded, continue
-                print(f"[WALLET] ⚠️ Wallet loading status: {e}")
-                _current_wallet = wallet_name  # Assume it's loaded if we get here
+            print(f"[WALLET] Loading wallet: {wallet_name}")
+            await rpc.call("load_wallet", {"wallet_path": wallet_name, "password": None})
+            print(f"[WALLET] ✓ Wallet loaded successfully")
+            
+            # If it's the withdrawal wallet, try to unlock it if it's encrypted
+            if wallet_name == WITHDRAWAL_WALLET_NAME:
+                await unlock_withdrawal_wallet_if_needed()
+            
+            _current_wallet = wallet_name
+            
         except Exception as e:
             print(f"[WALLET] ❌ Wallet management issue: {e}")
             raise
@@ -137,12 +129,17 @@ async def create_secure_withdrawal_wallet():
     try:
         print(f"[SECURE_WALLET] Creating secure withdrawal wallet: {WITHDRAWAL_WALLET_NAME}")
         
-        # Check if wallet already exists
+        # Check if wallet already exists (both in memory and on disk)
         wallets = await rpc.call("list_wallets")
         wallet_names = [wallet.get('path', '').split('/')[-1] for wallet in wallets]
         
-        if WITHDRAWAL_WALLET_NAME in wallet_names:
-            print(f"[SECURE_WALLET] ✓ Withdrawal wallet already exists, skipping creation")
+        # Also check if wallet file exists on disk
+        import os
+        wallet_file_path = f"/root/.electrum/wallets/{WITHDRAWAL_WALLET_NAME}"
+        wallet_exists_on_disk = os.path.exists(wallet_file_path)
+        
+        if WITHDRAWAL_WALLET_NAME in wallet_names or wallet_exists_on_disk:
+            print(f"[SECURE_WALLET] ✓ Withdrawal wallet already exists (in memory: {WITHDRAWAL_WALLET_NAME in wallet_names}, on disk: {wallet_exists_on_disk}), skipping creation")
             return True
         
         # Create wallet with encryption enabled
