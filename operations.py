@@ -77,15 +77,26 @@ async def ensure_wallet_loaded(wallet_name: str):
             wallets = await rpc.call("list_wallets")
             print(f"[WALLET] Found wallets: {wallets}")
             
-            if wallet_name not in wallets:
+            # Extract wallet names from the wallet objects
+            wallet_names = [wallet.get('path', '').split('/')[-1] for wallet in wallets]
+            print(f"[WALLET] Wallet names found: {wallet_names}")
+            
+            if wallet_name not in wallet_names:
                 # Wallet doesn't exist, create it securely
                 print(f"[WALLET] Wallet not found, creating: {wallet_name}")
                 
                 if wallet_name == WITHDRAWAL_WALLET_NAME:
                     # Create withdrawal wallet with enhanced security
                     await create_secure_withdrawal_wallet()
+                elif wallet_name == DEPOSIT_WALLET_NAME:
+                    # This shouldn't happen - default wallet should always exist
+                    print(f"[WALLET] ⚠️ Default wallet not found! This is unexpected.")
+                    raise HTTPException(
+                        status_code=500, 
+                        detail=f"Default wallet ({DEPOSIT_WALLET_NAME}) not found. Please ensure Electrum is properly configured."
+                    )
                 else:
-                    # Create regular wallet (shouldn't happen for deposit wallet as it should exist)
+                    # Create regular wallet
                     await rpc.call("create", [wallet_name])
                     print(f"[WALLET] ✓ Created wallet: {wallet_name}")
             
