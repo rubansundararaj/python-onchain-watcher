@@ -590,6 +590,7 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         # Step 6: Create and send transaction
         print(f"[WITHDRAW] Step 6: Creating transaction...")
         
+        total_amount_in_btc = amount_sats / 100000000.0
         # Use payto method for transaction creation
         try:
             # First, let's check the current fee rate
@@ -603,7 +604,7 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
                 print(f"[WITHDRAW] Using specified fee rate: {fee_rate} sats/byte")
                 result = await rpc.call("payto", {
                     "destination": recipient_address,
-                    "amount": amount_sats,
+                    "amount": total_amount_in_btc,
                     "fee": None,
                     "feerate": fee_rate
                 })
@@ -611,7 +612,7 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
                 print(f"[WITHDRAW] Using default fee rate")
                 result = await rpc.call("payto", {
                     "destination": recipient_address,
-                    "amount": amount_sats,
+                    "amount": total_amount_in_btc,
                     "fee": None,
                     "feerate": None
                 })
@@ -620,7 +621,7 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
             if "NotEnoughFunds" in error_str or "insufficient funds" in error_str.lower():
                 print(f"[WITHDRAW] ❌ Insufficient funds for transaction creation")
                 print(f"[WITHDRAW] Available: {total_balance} sats")
-                print(f"[WITHDRAW] Required: {required_amount} sats")
+                print(f"[WITHDRAW] Required: {total_amount_in_btc} sats")
                 print(f"[WITHDRAW] 💡 This might be due to:")
                 print(f"[WITHDRAW]   - UTXOs being too small to cover fees")
                 print(f"[WITHDRAW]   - Unconfirmed transactions")
