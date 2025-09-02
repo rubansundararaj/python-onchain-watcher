@@ -149,7 +149,7 @@ async def transfer_bitcoin_endpoint(req: TransferReq):
         print(f"[ENDPOINT] Error type: {type(e).__name__}")
         raise
 
-@app.post("/withdraw")
+@app.post("/withdraw-on-chain")
 async def withdraw_bitcoin_endpoint(req: WithdrawReq):
     """Withdraw Bitcoin from withdrawal wallet to a specific address"""
     print(f"[ENDPOINT] /withdraw called with request:")
