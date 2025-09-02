@@ -147,6 +147,15 @@ async def transfer_bitcoin_endpoint(req: TransferReq):
     except Exception as e:
         print(f"[ENDPOINT] ❌ Error in transfer endpoint: {e}")
         print(f"[ENDPOINT] Error type: {type(e).__name__}")
+        
+        # Send Telegram notification for transfer endpoint errors
+        try:
+            from telegram_bot import send_telegram_error
+            error_context = f"Transfer endpoint error - fee_rate: {req.fee_rate}"
+            await send_telegram_error(str(e), error_context)
+        except Exception as telegram_error:
+            print(f"[ENDPOINT] ⚠️ Failed to send Telegram notification: {telegram_error}")
+        
         raise
 
 @app.post("/withdraw-on-chain")
@@ -169,6 +178,15 @@ async def withdraw_bitcoin_endpoint(req: WithdrawReq):
     except Exception as e:
         print(f"[ENDPOINT] ❌ Error in withdraw endpoint: {e}")
         print(f"[ENDPOINT] Error type: {type(e).__name__}")
+        
+        # Send Telegram notification for endpoint errors
+        try:
+            from telegram_bot import send_telegram_error
+            error_context = f"Withdraw endpoint error - {req.recipient_address}, {req.amount_sats} sats"
+            await send_telegram_error(str(e), error_context)
+        except Exception as telegram_error:
+            print(f"[ENDPOINT] ⚠️ Failed to send Telegram notification: {telegram_error}")
+        
         raise
 
 

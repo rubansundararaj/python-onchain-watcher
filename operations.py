@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 # Load environment variables at module import time
 load_dotenv()
 
+# Import Telegram bot functionality
+from telegram_bot import send_telegram_error, send_telegram_success
+
 ELECTRUM_RPC_URL = os.getenv("ELECTRUM_RPC_URL", "http://127.0.0.1:7777")
 ELECTRUM_RPC_USER = os.getenv("ELECTRUM_RPC_USER", "")
 ELECTRUM_RPC_PASS = os.getenv("ELECTRUM_RPC_PASS", "")
@@ -282,9 +285,21 @@ async def create_new_deposit_address():
         await ensure_wallet_loaded(DEPOSIT_WALLET_NAME)
         
         # Now create the new address in the deposit wallet
-        return await rpc.call("createnewaddress")
+        new_address = await rpc.call("createnewaddress")
+        
+        # Send Telegram notification for new deposit address
+        success_message = f"New deposit address created: {new_address}"
+        success_context = f"Deposit address generation - {DEPOSIT_WALLET_NAME}"
+        await send_telegram_success(success_message, success_context)
+        
+        return new_address
     except Exception as e:
         print(f"[ERROR] Failed to create new deposit address: {e}")
+        
+        # Send Telegram notification for deposit address creation error
+        error_context = f"Deposit address creation failed - {DEPOSIT_WALLET_NAME}"
+        await send_telegram_error(str(e), error_context)
+        
         raise HTTPException(status_code=500, detail=f"Failed to create deposit address: {str(e)}")
 
 async def get_address_balance(address: str):
@@ -647,7 +662,11 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         print(f"[WITHDRAW] ✓ Transaction broadcasted successfully")
         print(f"[WITHDRAW] Transaction ID: {tx_id}")
         
-        # Step 9: Return success response
+        # Step 9: Send success notification and return response
+        success_message = f"Successfully sent {amount_sats} sats to {recipient_address}. TX ID: {tx_id}"
+        success_context = f"Withdrawal completed - {recipient_address}, {amount_sats} sats"
+        await send_telegram_success(success_message, success_context)
+        
         return {
             "success": True,
             "transaction_id": tx_id,
@@ -661,6 +680,11 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         print(f"[WITHDRAW] ❌ Unexpected error: {e}")
         print(f"[WITHDRAW] Error type: {type(e).__name__}")
         print(f"[WITHDRAW] Error details: {e}")
+        
+        # Send Telegram notification for withdrawal errors
+        error_context = f"Withdrawal to {recipient_address}, amount: {amount_sats} sats"
+        await send_telegram_error(str(e), error_context)
+        
         raise HTTPException(
             status_code=500,
             detail=f"Failed to withdraw Bitcoin: {str(e)}"
@@ -748,6 +772,12 @@ async def transfer_bitcoin_to_cold_storage(fee_rate: Optional[int] = None):
             print(f"[COLD_STORAGE] ✓ Transaction broadcast successfully! TXID: {txid}")
             
             print(f"[COLD_STORAGE] 🎉 Cold storage transfer completed successfully!")
+            
+            # Send Telegram notification for successful cold storage transfer
+            success_message = f"Cold storage transfer completed! TX ID: {txid}"
+            success_context = f"Transfer to cold storage - {transfer_amount_sats} sats ({amount_btc} BTC)"
+            await send_telegram_success(success_message, success_context)
+            
             return {
                 "success": True,
                 "txid": txid,
@@ -785,6 +815,12 @@ async def transfer_bitcoin_to_cold_storage(fee_rate: Optional[int] = None):
                 print(f"[COLD_STORAGE] ✓ Transaction broadcast successfully! TXID: {txid}")
                 
                 print(f"[COLD_STORAGE] 🎉 Cold storage transfer completed with paytomany!")
+                
+                # Send Telegram notification for successful cold storage transfer (paytomany)
+                success_message = f"Cold storage transfer completed (paytomany)! TX ID: {txid}"
+                success_context = f"Transfer to cold storage - {transfer_amount_sats} sats ({amount_btc} BTC)"
+                await send_telegram_success(success_message, success_context)
+                
                 return {
                     "success": True,
                     "txid": txid,
@@ -799,6 +835,12 @@ async def transfer_bitcoin_to_cold_storage(fee_rate: Optional[int] = None):
                 
             except Exception as paytomany_error:
                 print(f"[COLD_STORAGE] ❌ paytomany also failed: {paytomany_error}")
+                
+                # Send Telegram notification for cold storage transfer failure
+                error_message = f"Both payto and paytomany methods failed. payto: {str(payto_error)}, paytomany: {str(paytomany_error)}"
+                error_context = f"Cold storage transfer failed - {transfer_amount_sats} sats"
+                await send_telegram_error(error_message, error_context)
+                
                 raise HTTPException(
                     status_code=500,
                     detail=f"Both payto and paytomany methods failed. payto: {str(payto_error)}, paytomany: {str(paytomany_error)}"
@@ -811,6 +853,11 @@ async def transfer_bitcoin_to_cold_storage(fee_rate: Optional[int] = None):
         print(f"[COLD_STORAGE] ❌ Unexpected error: {e}")
         print(f"[COLD_STORAGE] Error type: {type(e).__name__}")
         print(f"[COLD_STORAGE] Error details: {str(e)}")
+        
+        # Send Telegram notification for cold storage transfer error
+        error_context = f"Cold storage transfer unexpected error"
+        await send_telegram_error(str(e), error_context)
+        
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to transfer to cold storage: {str(e)}"
