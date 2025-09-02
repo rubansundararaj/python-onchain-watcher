@@ -466,8 +466,8 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         await ensure_wallet_loaded(WITHDRAWAL_WALLET_NAME)
         print(f"[WITHDRAW] ✓ Withdrawal wallet loaded successfully")
         
-        # Step 2: Check wallet balance
-        print(f"[WITHDRAW] Step 2: Checking withdrawal wallet balance...")
+        # Step 2: Check wallet balance and UTXOs
+        print(f"[WITHDRAW] Step 2: Checking withdrawal wallet balance and UTXOs...")
         balance_result = await rpc.call("getbalance")
         print(f"[WITHDRAW] Raw balance result: {balance_result}")
         
@@ -498,6 +498,38 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
             total_balance = int(balance_result) if balance_result else 0
             
         print(f"[WITHDRAW] ✓ Current balance: {total_balance} sats")
+        
+        # Also check UTXOs to get more accurate spendable amount
+        print(f"[WITHDRAW] Checking UTXOs for spendable amount...")
+        try:
+            utxos = await rpc.call("listunspent")
+            print(f"[WITHDRAW] Raw UTXOs: {utxos}")
+            
+            # Calculate total spendable from UTXOs
+            spendable_balance = 0
+            for utxo in utxos:
+                if isinstance(utxo, dict) and 'value' in utxo:
+                    spendable_balance += int(utxo['value'])
+                elif isinstance(utxo, dict) and 'amount' in utxo:
+                    # Handle different UTXO formats
+                    amount = utxo['amount']
+                    if isinstance(amount, str):
+                        amount = float(amount)
+                        if amount < 1:  # Likely in BTC
+                            amount = int(amount * 100000000)
+                        else:
+                            amount = int(amount)
+                    spendable_balance += amount
+            
+            print(f"[WITHDRAW] ✓ Spendable balance from UTXOs: {spendable_balance} sats")
+            
+            # Use the smaller of the two balances (more conservative)
+            total_balance = min(total_balance, spendable_balance)
+            print(f"[WITHDRAW] ✓ Using conservative balance: {total_balance} sats")
+            
+        except Exception as utxo_error:
+            print(f"[WITHDRAW] ⚠️ Could not check UTXOs: {utxo_error}")
+            print(f"[WITHDRAW] Using balance result: {total_balance} sats")
         
         # Step 3: Calculate required amount (amount + estimated fee)
         estimated_fee = 300  # Conservative estimate in sats
@@ -540,22 +572,39 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         print(f"[WITHDRAW] Step 6: Creating transaction...")
         
         # Use payto method for transaction creation
-        if fee_rate:
-            print(f"[WITHDRAW] Using fee rate: {fee_rate} sats/byte")
-            result = await rpc.call("payto", {
-                "destination": recipient_address,
-                "amount": amount_sats,
-                "fee": None,
-                "feerate": fee_rate
-            })
-        else:
-            print(f"[WITHDRAW] Using default fee rate")
-            result = await rpc.call("payto", {
-                "destination": recipient_address,
-                "amount": amount_sats,
-                "fee": None,
-                "feerate": None
-            })
+        try:
+            if fee_rate:
+                print(f"[WITHDRAW] Using fee rate: {fee_rate} sats/byte")
+                result = await rpc.call("payto", {
+                    "destination": recipient_address,
+                    "amount": amount_sats,
+                    "fee": None,
+                    "feerate": fee_rate
+                })
+            else:
+                print(f"[WITHDRAW] Using default fee rate")
+                result = await rpc.call("payto", {
+                    "destination": recipient_address,
+                    "amount": amount_sats,
+                    "fee": None,
+                    "feerate": None
+                })
+        except Exception as payto_error:
+            error_str = str(payto_error)
+            if "NotEnoughFunds" in error_str or "insufficient funds" in error_str.lower():
+                print(f"[WITHDRAW] ❌ Insufficient funds for transaction creation")
+                print(f"[WITHDRAW] Available: {total_balance} sats")
+                print(f"[WITHDRAW] Required: {required_amount} sats")
+                print(f"[WITHDRAW] 💡 This might be due to:")
+                print(f"[WITHDRAW]   - UTXOs being too small to cover fees")
+                print(f"[WITHDRAW]   - Unconfirmed transactions")
+                print(f"[WITHDRAW]   - Dust outputs that can't be spent")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient funds for transaction. Available: {total_balance} sats, Required: {required_amount} sats. UTXOs may be too small or unconfirmed."
+                )
+            else:
+                raise payto_error
         
         print(f"[WITHDRAW] ✓ Transaction created successfully")
         
