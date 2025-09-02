@@ -72,6 +72,16 @@ async def ensure_wallet_loaded(wallet_name: str):
             
         print(f"[WALLET] Ensuring wallet '{wallet_name}' is loaded...")
         try:
+            # If a different wallet is currently loaded, unload it first
+            if _current_wallet and _current_wallet != wallet_name:
+                print(f"[WALLET] Unloading current wallet '{_current_wallet}' before loading '{wallet_name}'...")
+                try:
+                    await rpc.call("close_wallet", {})
+                    print(f"[WALLET] ✓ Unloaded wallet '{_current_wallet}'")
+                except Exception as unload_error:
+                    print(f"[WALLET] ⚠️ Warning: Failed to unload wallet '{_current_wallet}': {unload_error}")
+                    # Continue anyway, as the new wallet load might still work
+            
             # Check if wallet exists
             print("[WALLET] Checking for existing wallets...")
             wallets = await rpc.call("list_wallets")
@@ -99,6 +109,9 @@ async def ensure_wallet_loaded(wallet_name: str):
                     # Create regular wallet
                     await rpc.call("create", {"wallet_path": wallet_name})
                     print(f"[WALLET] ✓ Created wallet: {wallet_name}")
+            else:
+                # Wallet exists, just log it
+                print(f"[WALLET] ✓ Wallet '{wallet_name}' already exists, skipping creation")
             
             # Load the wallet
             try:
@@ -123,6 +136,14 @@ async def create_secure_withdrawal_wallet():
     """Create a secure withdrawal wallet with proper permissions and encryption"""
     try:
         print(f"[SECURE_WALLET] Creating secure withdrawal wallet: {WITHDRAWAL_WALLET_NAME}")
+        
+        # Check if wallet already exists
+        wallets = await rpc.call("list_wallets")
+        wallet_names = [wallet.get('path', '').split('/')[-1] for wallet in wallets]
+        
+        if WITHDRAWAL_WALLET_NAME in wallet_names:
+            print(f"[SECURE_WALLET] ✓ Withdrawal wallet already exists, skipping creation")
+            return True
         
         # Create wallet with encryption enabled
         wallet_path = f"/root/.electrum/wallets/{WITHDRAWAL_WALLET_NAME}"
