@@ -469,11 +469,31 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         # Step 2: Check wallet balance
         print(f"[WITHDRAW] Step 2: Checking withdrawal wallet balance...")
         balance_result = await rpc.call("getbalance")
-        total_balance = balance_result.get("confirmed", 0)
+        print(f"[WITHDRAW] Raw balance result: {balance_result}")
+        
+        # Handle different balance formats
+        if isinstance(balance_result, dict):
+            total_balance = balance_result.get("confirmed", 0)
+        elif isinstance(balance_result, str):
+            # If balance is returned as string like "0.00002 sats", extract the number
+            import re
+            balance_match = re.search(r'(\d+\.?\d*)', balance_result)
+            if balance_match:
+                total_balance = float(balance_match.group(1))
+                # Convert to satoshis if it's in BTC
+                if 'btc' in balance_result.lower() or total_balance < 1:
+                    total_balance = int(total_balance * 100000000)  # Convert BTC to sats
+                else:
+                    total_balance = int(total_balance)
+            else:
+                total_balance = 0
+        else:
+            total_balance = int(balance_result) if balance_result else 0
+            
         print(f"[WITHDRAW] ✓ Current balance: {total_balance} sats")
         
         # Step 3: Calculate required amount (amount + estimated fee)
-        estimated_fee = 1000  # Conservative estimate in sats
+        estimated_fee = 300  # Conservative estimate in sats
         required_amount = amount_sats + estimated_fee
         print(f"[WITHDRAW] Step 3: Calculating required amount...")
         print(f"[WITHDRAW] Amount to send: {amount_sats} sats")
@@ -481,10 +501,12 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         print(f"[WITHDRAW] Required total: {required_amount} sats")
         
         # Step 4: Check if we have enough balance
+        print(f"[WITHDRAW] Step 4: Checking sufficient balance...")
+        print(f"[WITHDRAW] Available: {total_balance} sats (type: {type(total_balance)})")
+        print(f"[WITHDRAW] Required: {required_amount} sats (type: {type(required_amount)})")
+        
         if total_balance < required_amount:
             print(f"[WITHDRAW] ❌ Insufficient balance!")
-            print(f"[WITHDRAW] Available: {total_balance} sats")
-            print(f"[WITHDRAW] Required: {required_amount} sats")
             print(f"[WITHDRAW] Shortfall: {required_amount - total_balance} sats")
             raise HTTPException(
                 status_code=400,
