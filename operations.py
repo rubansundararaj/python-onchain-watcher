@@ -473,7 +473,14 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         
         # Handle different balance formats
         if isinstance(balance_result, dict):
-            total_balance = balance_result.get("confirmed", 0)
+            confirmed_balance = balance_result.get("confirmed", 0)
+            # If confirmed balance is a string (like "0.00002"), convert it
+            if isinstance(confirmed_balance, str):
+                total_balance = float(confirmed_balance)
+                # Convert BTC to satoshis (multiply by 100,000,000)
+                total_balance = int(total_balance * 100000000)
+            else:
+                total_balance = int(confirmed_balance) if confirmed_balance else 0
         elif isinstance(balance_result, str):
             # If balance is returned as string like "0.00002 sats", extract the number
             import re
