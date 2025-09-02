@@ -16,6 +16,8 @@
 #   POST   /deposit/address                 -> create new deposit address
 #   GET    /deposit/balance                 -> get deposit wallet balance
 #   GET    /withdraw/balance                -> get withdrawal wallet balance
+#   POST   /withdraw/address                -> create new withdrawal address
+#   POST   /withdraw/to-address             -> withdraw funds to specific address
 #   POST   /withdraw/process                -> process withdrawal to cold storage
 #   GET    /wallets/status                  -> get wallet status information
 #
@@ -42,7 +44,7 @@
 
 
 import asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
@@ -205,6 +207,65 @@ async def get_withdrawal_balance():
         return {"wallet": WITHDRAWAL_WALLET_NAME, "balance": result}
     except Exception as e:
         print(f"[ENDPOINT] ❌ Error in withdrawal balance endpoint: {e}")
+        print(f"[ENDPOINT] Error type: {type(e).__name__}")
+        raise
+
+@app.post("/withdraw/address")
+async def create_withdrawal_address():
+    """Create a new withdrawal address for users to receive funds"""
+    print(f"[ENDPOINT] /withdraw/address called")
+    
+    try:
+        print(f"[ENDPOINT] Calling create_new_deposit_address function for withdrawal wallet...")
+        # We can reuse the same function but ensure it uses the withdrawal wallet
+        from operations import ensure_wallet_loaded, rpc
+        await ensure_wallet_loaded(WITHDRAWAL_WALLET_NAME)
+        address = await rpc.call("createnewaddress", {})
+        print(f"[ENDPOINT] ✓ Withdrawal address created successfully: {address}")
+        return {"address": address, "wallet": WITHDRAWAL_WALLET_NAME}
+    except Exception as e:
+        print(f"[ENDPOINT] ❌ Error in withdrawal address endpoint: {e}")
+        print(f"[ENDPOINT] Error type: {type(e).__name__}")
+        raise
+
+@app.post("/withdraw/to-address")
+async def withdraw_to_address(request: dict):
+    """Withdraw funds from withdrawal wallet to a specific address"""
+    print(f"[ENDPOINT] /withdraw/to-address called")
+    
+    try:
+        destination_address = request.get("address")
+        amount_sats = request.get("amount_sats")
+        fee_rate = request.get("fee_rate", 2)
+        
+        if not destination_address:
+            raise HTTPException(status_code=400, detail="Missing 'address' parameter")
+        if not amount_sats:
+            raise HTTPException(status_code=400, detail="Missing 'amount_sats' parameter")
+        
+        print(f"[ENDPOINT] Withdrawing {amount_sats} sats to {destination_address} with fee_rate {fee_rate}")
+        
+        # Ensure withdrawal wallet is loaded
+        from operations import ensure_wallet_loaded, rpc
+        await ensure_wallet_loaded(WITHDRAWAL_WALLET_NAME)
+        
+        # Use payto method for withdrawal
+        result = await rpc.call("payto", {
+            "destination": destination_address,
+            "amount": amount_sats / 100000000,  # Convert sats to BTC
+            "feerate": fee_rate
+        })
+        
+        print(f"[ENDPOINT] ✓ Withdrawal transaction created successfully")
+        return {
+            "wallet": WITHDRAWAL_WALLET_NAME,
+            "destination": destination_address,
+            "amount_sats": amount_sats,
+            "fee_rate": fee_rate,
+            "transaction": result
+        }
+    except Exception as e:
+        print(f"[ENDPOINT] ❌ Error in withdraw to address endpoint: {e}")
         print(f"[ENDPOINT] Error type: {type(e).__name__}")
         raise
 
