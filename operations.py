@@ -45,34 +45,149 @@ rpc = ElectrumRPC(ELECTRUM_RPC_URL, ELECTRUM_RPC_USER, ELECTRUM_RPC_PASS)
 # in-memory watch state (you can swap to Redis/DB if you like)
 WATCH: Dict[str, Dict[str, Any]] = {}
 
+# Wallet loading lock to prevent race conditions
+_wallet_loading_lock = asyncio.Lock()
+_current_wallet = None
+
+# Wallet configuration
+DEPOSIT_WALLET_NAME = "default_wallet"  # Use existing default wallet as deposit wallet
+WITHDRAWAL_WALLET_NAME = "withdrawal_wallet"
+
 # ------------------- Operations -------------------
-async def ensure_wallet_loaded():
-    """Ensure a wallet is loaded for operations that require it"""
-    print(f"[WALLET] Ensuring wallet is loaded...")
-    try:
-        # Check if we have any wallets
-        print(f"[WALLET] Checking for existing wallets...")
-        wallets = await rpc.call("list_wallets")
-        print(f"[WALLET] Found wallets: {wallets}")
-        
-        if not wallets:
-            # No wallets exist, create one
-            wallet_name = "default"
-            print(f"[WALLET] No wallets found, creating new wallet: {wallet_name}")
-            await rpc.call("create", [wallet_name])
-            print(f"[WALLET] ✓ Created new wallet: {wallet_name}")
-        
-        # Try to load a wallet (using empty params as that's what worked)
+async def ensure_wallet_loaded(wallet_name: str):
+    """Ensure the specified wallet is loaded"""
+    global _current_wallet
+    
+    # If the correct wallet is already loaded, return immediately
+    if _current_wallet == wallet_name:
+        print(f"[WALLET] Wallet '{wallet_name}' already loaded, skipping...")
+        return
+    
+    # Use lock to prevent race conditions with multiple simultaneous calls
+    async with _wallet_loading_lock:
+        # Double-check after acquiring lock (another call might have loaded it)
+        if _current_wallet == wallet_name:
+            print(f"[WALLET] Wallet '{wallet_name}' loaded by another call, skipping...")
+            return
+            
+        print(f"[WALLET] Ensuring wallet '{wallet_name}' is loaded...")
         try:
-            print(f"[WALLET] Attempting to load wallet...")
-            await rpc.call("load_wallet", [])
-            print(f"[WALLET] ✓ Wallet loaded successfully")
+            # Check if wallet exists
+            print("[WALLET] Checking for existing wallets...")
+            wallets = await rpc.call("list_wallets")
+            print(f"[WALLET] Found wallets: {wallets}")
+            
+            if wallet_name not in wallets:
+                # Wallet doesn't exist, create it securely
+                print(f"[WALLET] Wallet not found, creating: {wallet_name}")
+                
+                if wallet_name == WITHDRAWAL_WALLET_NAME:
+                    # Create withdrawal wallet with enhanced security
+                    await create_secure_withdrawal_wallet()
+                else:
+                    # Create regular wallet (shouldn't happen for deposit wallet as it should exist)
+                    await rpc.call("create", [wallet_name])
+                    print(f"[WALLET] ✓ Created wallet: {wallet_name}")
+            
+            # Load the wallet
+            try:
+                print(f"[WALLET] Loading wallet: {wallet_name}")
+                await rpc.call("load_wallet", [wallet_name])
+                print(f"[WALLET] ✓ Wallet loaded successfully")
+                
+                # If it's the withdrawal wallet, try to unlock it if it's encrypted
+                if wallet_name == WITHDRAWAL_WALLET_NAME:
+                    await unlock_withdrawal_wallet_if_needed()
+                
+                _current_wallet = wallet_name
+            except Exception as e:
+                # Wallet might already be loaded, continue
+                print(f"[WALLET] ⚠️ Wallet loading status: {e}")
+                _current_wallet = wallet_name  # Assume it's loaded if we get here
         except Exception as e:
-            # Wallet might already be loaded, continue
-            print(f"[WALLET] ⚠️ Wallet loading status: {e}")
+            print(f"[WALLET] ❌ Wallet management issue: {e}")
+            raise
+
+async def create_secure_withdrawal_wallet():
+    """Create a secure withdrawal wallet with proper permissions and encryption"""
+    try:
+        print(f"[SECURE_WALLET] Creating secure withdrawal wallet: {WITHDRAWAL_WALLET_NAME}")
+        
+        # Create wallet with encryption enabled
+        wallet_path = f"/root/.electrum/wallets/{WITHDRAWAL_WALLET_NAME}"
+        
+        # Create the wallet with encryption
+        print(f"[SECURE_WALLET] Creating encrypted wallet...")
+        await rpc.call("create", [WITHDRAWAL_WALLET_NAME])
+        
+        # Set wallet password for encryption
+        import secrets
+        import string
+        
+        # Generate a strong password
+        password = ''.join(secrets.choice(string.ascii_letters + string.digits + "!@#$%^&*") for _ in range(32))
+        
+        print(f"[SECURE_WALLET] Setting wallet password...")
+        await rpc.call("password", [password])
+        
+        # Set proper file permissions (readable only by owner)
+        import os
+        import stat
+        
+        # Make wallet file readable only by owner (600 permissions)
+        os.chmod(wallet_path, stat.S_IRUSR | stat.S_IWUSR)
+        print(f"[SECURE_WALLET] ✓ Set secure file permissions (600) for {wallet_path}")
+        
+        # Store password securely (in production, use proper secret management)
+        # For now, we'll store it in environment or secure storage
+        import os
+        os.environ[f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD"] = password
+        
+        print(f"[SECURE_WALLET] ✓ Created secure withdrawal wallet with encryption")
+        print(f"[SECURE_WALLET] ⚠️  Password stored in environment variable: {WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
+        
+        return True
+        
     except Exception as e:
-        print(f"[WALLET] ❌ Wallet management issue: {e}")
-        raise
+        print(f"[SECURE_WALLET] ❌ Failed to create secure withdrawal wallet: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to create secure withdrawal wallet: {str(e)}"
+        )
+
+async def unlock_withdrawal_wallet_if_needed():
+    """Unlock the withdrawal wallet if it's encrypted and we have the password"""
+    try:
+        import os
+        
+        # Get the password from environment variable
+        password_env_var = f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD"
+        password = os.environ.get(password_env_var)
+        
+        if not password:
+            print(f"[UNLOCK] ⚠️ No password found in environment variable: {password_env_var}")
+            return
+        
+        print(f"[UNLOCK] Attempting to unlock withdrawal wallet...")
+        
+        # Try to unlock the wallet
+        try:
+            await rpc.call("password", [password])
+            print(f"[UNLOCK] ✓ Withdrawal wallet unlocked successfully")
+        except Exception as unlock_error:
+            print(f"[UNLOCK] ⚠️ Wallet unlock attempt: {unlock_error}")
+            # Wallet might not be encrypted or already unlocked
+            pass
+            
+    except Exception as e:
+        print(f"[UNLOCK] ❌ Failed to unlock withdrawal wallet: {e}")
+        # Don't raise here, as the wallet might work without unlocking
+
+def reset_wallet_state():
+    """Reset wallet loading state (useful for testing or if wallet needs to be reloaded)"""
+    global _current_wallet
+    _current_wallet = None
+    print("[WALLET] Wallet state reset - next calls will reload wallet")
 
 async def get_health_info():
     """Get electrum server info"""
@@ -83,23 +198,24 @@ async def get_current_block_height():
     info = await rpc.call("getinfo")
     return {"height": info.get("server_height")}
 
-async def create_new_address():
-    """Create a new address"""
+async def create_new_deposit_address():
+    """Create a new deposit address for users to send funds to"""
     try:
-        # Ensure wallet is loaded
-        await ensure_wallet_loaded()
+        # Ensure deposit wallet is loaded
+        await ensure_wallet_loaded(DEPOSIT_WALLET_NAME)
         
-        # Now create the new address
+        # Now create the new address in the deposit wallet
         return await rpc.call("createnewaddress")
     except Exception as e:
-        print(f"[ERROR] Failed to create new address: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create address: {str(e)}")
+        print(f"[ERROR] Failed to create new deposit address: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create deposit address: {str(e)}")
 
 async def get_address_balance(address: str):
-    """Get balance for a specific address"""
+    """Get balance for a specific address (works with any wallet)"""
     try:
-        # Ensure wallet is loaded for address operations
-        await ensure_wallet_loaded()
+        # For address balance, we can use either wallet since it's just querying the blockchain
+        # But we need at least one wallet loaded
+        await ensure_wallet_loaded(DEPOSIT_WALLET_NAME)
         return await rpc.call("getaddressbalance", [address])
     except Exception as e:
         print(f"[ERROR] Failed to get address balance for {address}: {e}")
@@ -109,7 +225,7 @@ async def get_address_utxos(address: str, min_conf: int = 0, max_conf: int = 999
     """Get UTXOs for a specific address"""
     try:
         # Ensure wallet is loaded for address operations
-        await ensure_wallet_loaded()
+        await ensure_wallet_loaded(DEPOSIT_WALLET_NAME)
         # Use getaddressunspent which is the correct method for getting UTXOs for a specific address
         return await rpc.call("getaddressunspent", [address])
     except Exception as e:
@@ -120,7 +236,7 @@ async def get_address_history(address: str):
     """Get complete transaction history for an address"""
     try:
         # Ensure wallet is loaded for address operations
-        await ensure_wallet_loaded()
+        await ensure_wallet_loaded(DEPOSIT_WALLET_NAME)
         return await rpc.call("getaddresshistory", [address])
     except Exception as e:
         print(f"[ERROR] Failed to get address history for {address}: {e}")
@@ -141,7 +257,7 @@ async def get_transaction_details(txid: str):
             raw_tx = await rpc.call("getrawtransaction", [txid, False])
             return {"txid": txid, "raw_hex": raw_tx, "note": "Raw transaction data - needs decoding"}
 
-async def watch_address(address: str, webhook: Optional[str] = None):
+def watch_address(address: str, webhook: Optional[str] = None):
     """Start watching an address for changes"""
     webhook_url = webhook if webhook else WEBHOOK_URL
     if not webhook_url:
@@ -154,7 +270,7 @@ async def watch_address(address: str, webhook: Optional[str] = None):
     }
     return {"ok": True, "watching": list(WATCH.keys())}
 
-async def list_watched_addresses():
+def list_watched_addresses():
     """List all watched addresses"""
     return {"watching": WATCH}
 
@@ -206,21 +322,22 @@ async def cleanup():
 async def startup():
     """Initialize wallet and other resources on startup"""
     try:
-        await ensure_wallet_loaded()
+        await ensure_wallet_loaded(DEPOSIT_WALLET_NAME)
         print("[INFO] Wallet initialization completed")
     except Exception as e:
         print(f"[WARN] Wallet initialization failed: {e}")
 
 
 
-async def get_wallet_balance():
-    """Get overall wallet balance"""
-    print(f"[BALANCE] Getting overall wallet balance...")
+async def get_wallet_balance(wallet_type: str = "deposit"):
+    """Get overall wallet balance for specified wallet type"""
+    print(f"[BALANCE] Getting {wallet_type} wallet balance...")
     
     try:
-        print(f"[BALANCE] Step 1: Ensuring wallet is loaded...")
-        await ensure_wallet_loaded()
-        print(f"[BALANCE] ✓ Wallet loaded successfully")
+        wallet_name = DEPOSIT_WALLET_NAME if wallet_type == "deposit" else WITHDRAWAL_WALLET_NAME
+        print(f"[BALANCE] Step 1: Ensuring {wallet_type} wallet is loaded...")
+        await ensure_wallet_loaded(wallet_name)
+        print(f"[BALANCE] ✓ {wallet_type} wallet loaded successfully")
         
         print(f"[BALANCE] Step 2: Getting wallet balance...")
         balance = await rpc.call("getbalance")
@@ -263,12 +380,12 @@ async def get_wallet_balance():
         )
 
 async def transfer_bitcoin_to_cold_storage(fee_rate: Optional[int] = None):
-    """Transfer 70% of wallet balance to cold storage address"""
+    """Transfer 70% of withdrawal wallet balance to cold storage address"""
     try:
         cold_wallet_address = "bc1q0pspp7zafe6qakrasugxsm49k2vfwa78xyvhnx"
-        print(f"[COLD_STORAGE] Step 1: Ensuring wallet is loaded...")
-        await ensure_wallet_loaded()
-        print(f"[COLD_STORAGE] ✓ Wallet loaded successfully")
+        print(f"[COLD_STORAGE] Step 1: Ensuring withdrawal wallet is loaded...")
+        await ensure_wallet_loaded(WITHDRAWAL_WALLET_NAME)
+        print(f"[COLD_STORAGE] ✓ Withdrawal wallet loaded successfully")
         
         print(f"[COLD_STORAGE] Step 2: Getting overall wallet balance...")
         # Get the overall wallet balance
