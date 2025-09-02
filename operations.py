@@ -115,7 +115,7 @@ async def ensure_wallet_loaded(wallet_name: str):
             # For withdrawal wallet, we need to provide the password during load
             if wallet_name == WITHDRAWAL_WALLET_NAME:
                 # Get the password from environment variable
-                password = os.getenv(f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
+                password = os.getenv("WITHDRAW_WALLET_V2_PASSWORD")
                 if not password:
                     print(f"[WALLET] ❌ No password found for withdrawal wallet in environment variables")
                     print(f"[WALLET] 🔍 Checking if wallet exists on disk...")
@@ -137,7 +137,7 @@ async def ensure_wallet_loaded(wallet_name: str):
                             await create_secure_withdrawal_wallet()
                             
                             # Get the new password
-                            password = os.getenv(f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
+                            password = os.getenv("WITHDRAW_WALLET_V2_PASSWORD")
                             if not password:
                                 raise HTTPException(
                                     status_code=500, 
@@ -153,7 +153,7 @@ async def ensure_wallet_loaded(wallet_name: str):
                         print(f"[WALLET] 💡 Wallet doesn't exist on disk, will be created with new password")
                         # Wallet doesn't exist, create it
                         await create_secure_withdrawal_wallet()
-                        password = os.getenv(f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
+                        password = os.getenv("WITHDRAW_WALLET_V2_PASSWORD")
                         if not password:
                             raise HTTPException(
                                 status_code=500, 
@@ -225,11 +225,11 @@ async def create_secure_withdrawal_wallet():
         # Store password securely (in production, use proper secret management)
         # Store in both memory and .env file for persistence
         import os
-        os.environ[f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD"] = password
+        os.environ["WITHDRAW_WALLET_V2_PASSWORD"] = password
         
         # Also store in .env file for persistence across restarts
         env_file_path = ".env"
-        env_var_name = f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD"
+        env_var_name = "WITHDRAW_WALLET_V2_PASSWORD"
         
         # Read existing .env file
         env_content = ""
@@ -247,7 +247,7 @@ async def create_secure_withdrawal_wallet():
             print(f"[SECURE_WALLET] ✓ Password already exists in .env file")
         
         print(f"[SECURE_WALLET] ✓ Created secure withdrawal wallet with encryption")
-        print(f"[SECURE_WALLET] ⚠️  Password stored in environment variable: {WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
+        print(f"[SECURE_WALLET] ⚠️  Password stored in environment variable: WITHDRAW_WALLET_V2_PASSWORD")
         
         return True
         
@@ -522,8 +522,22 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         
         print(f"[WITHDRAW] ✓ Sufficient balance available")
         
-        # Step 5: Create and send transaction
-        print(f"[WITHDRAW] Step 4: Creating transaction...")
+        # Step 5: Unlock wallet for transaction (if it's encrypted)
+        print(f"[WITHDRAW] Step 5: Unlocking wallet for transaction...")
+        try:
+            # Get the password from environment variable
+            password = os.getenv("WITHDRAW_WALLET_V2_PASSWORD")
+            if password:
+                await rpc.call("password", {"password": password})
+                print(f"[WITHDRAW] ✓ Wallet unlocked successfully")
+            else:
+                print(f"[WITHDRAW] ⚠️ No password found, wallet might not be encrypted")
+        except Exception as unlock_error:
+            print(f"[WITHDRAW] ⚠️ Wallet unlock attempt: {unlock_error}")
+            # Continue anyway, wallet might not need unlocking
+        
+        # Step 6: Create and send transaction
+        print(f"[WITHDRAW] Step 6: Creating transaction...")
         
         # Use payto method for transaction creation
         if fee_rate:
@@ -545,19 +559,19 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         
         print(f"[WITHDRAW] ✓ Transaction created successfully")
         
-        # Step 6: Sign the transaction
-        print(f"[WITHDRAW] Step 5: Signing transaction...")
+        # Step 7: Sign the transaction
+        print(f"[WITHDRAW] Step 7: Signing transaction...")
         signed_result = await rpc.call("signtransaction", {"tx": result})
         print(f"[WITHDRAW] ✓ Transaction signed successfully")
         
-        # Step 7: Broadcast the transaction
-        print(f"[WITHDRAW] Step 6: Broadcasting transaction...")
+        # Step 8: Broadcast the transaction
+        print(f"[WITHDRAW] Step 8: Broadcasting transaction...")
         broadcast_result = await rpc.call("broadcast", {"tx": signed_result})
         tx_id = broadcast_result
         print(f"[WITHDRAW] ✓ Transaction broadcasted successfully")
         print(f"[WITHDRAW] Transaction ID: {tx_id}")
         
-        # Step 8: Return success response
+        # Step 9: Return success response
         return {
             "success": True,
             "transaction_id": tx_id,

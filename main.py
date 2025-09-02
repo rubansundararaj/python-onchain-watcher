@@ -346,7 +346,7 @@ async def get_wallets_status():
                 "name": WITHDRAWAL_WALLET_NAME,
                 "exists": WITHDRAWAL_WALLET_NAME in wallets,
                 "path": f"/root/.electrum/wallets/{WITHDRAWAL_WALLET_NAME}",
-                "encrypted": bool(os.environ.get(f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD"))
+                "encrypted": bool(os.environ.get("WITHDRAW_WALLET_V2_PASSWORD"))
             }
         }
         
