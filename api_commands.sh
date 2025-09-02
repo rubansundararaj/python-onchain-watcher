@@ -233,4 +233,10 @@ echo ""
 
 
 
-020000000001010eadc7b02ca808169c6d1516b2214884d56fb290922aad026727e357692ce5be0100000000fdffffff02e8030000000000001600144742c9cf4c09071f75bdcd8c1b92e30701389f53d80e000000000000160014e43c47ce49ab6e4d55ba513390df4dd4a71c33670247304402202427ed75ababe14c51bdfd39b640b820010c3fa6906ca4b94d1a4248dacc04eb02202444e3206361bd9652a8f858466397921ccec6b353a8e48cdbf437e9dab200470121032b064a42f57925e0938e54d14abd4558c4a1ad8ab541f5a1ed78782c6b99a1071bed0d00
+echo ""
+echo "=== NEW WITHDRAW ENDPOINT ==="
+echo "Withdraw from withdrawal wallet with balance check:"
+curl -X POST http://localhost:8000/withdraw \
+  -H "Content-Type: application/json" \
+  -d '{"recipient_address": "bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne", "amount_sats": 1000, "fee_rate": 2}'
+echo ""

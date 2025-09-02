@@ -456,6 +456,97 @@ async def get_wallet_balance(wallet_type: str = "deposit"):
             detail=f"Failed to get wallet balance: {str(e)}"
         )
 
+async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, fee_rate: Optional[int] = None):
+    """Withdraw Bitcoin from withdrawal wallet to a specific address"""
+    print(f"[WITHDRAW] Starting withdrawal: {recipient_address}, amount: {amount_sats} sats, fee_rate: {fee_rate}")
+    
+    try:
+        # Step 1: Ensure withdrawal wallet is loaded
+        print(f"[WITHDRAW] Step 1: Ensuring withdrawal wallet is loaded...")
+        await ensure_wallet_loaded(WITHDRAWAL_WALLET_NAME)
+        print(f"[WITHDRAW] ✓ Withdrawal wallet loaded successfully")
+        
+        # Step 2: Check wallet balance
+        print(f"[WITHDRAW] Step 2: Checking withdrawal wallet balance...")
+        balance_result = await rpc.call("getbalance")
+        total_balance = balance_result.get("confirmed", 0)
+        print(f"[WITHDRAW] ✓ Current balance: {total_balance} sats")
+        
+        # Step 3: Calculate required amount (amount + estimated fee)
+        estimated_fee = 1000  # Conservative estimate in sats
+        required_amount = amount_sats + estimated_fee
+        print(f"[WITHDRAW] Step 3: Calculating required amount...")
+        print(f"[WITHDRAW] Amount to send: {amount_sats} sats")
+        print(f"[WITHDRAW] Estimated fee: {estimated_fee} sats")
+        print(f"[WITHDRAW] Required total: {required_amount} sats")
+        
+        # Step 4: Check if we have enough balance
+        if total_balance < required_amount:
+            print(f"[WITHDRAW] ❌ Insufficient balance!")
+            print(f"[WITHDRAW] Available: {total_balance} sats")
+            print(f"[WITHDRAW] Required: {required_amount} sats")
+            print(f"[WITHDRAW] Shortfall: {required_amount - total_balance} sats")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient balance. Available: {total_balance} sats, Required: {required_amount} sats"
+            )
+        
+        print(f"[WITHDRAW] ✓ Sufficient balance available")
+        
+        # Step 5: Create and send transaction
+        print(f"[WITHDRAW] Step 4: Creating transaction...")
+        
+        # Use payto method for transaction creation
+        if fee_rate:
+            print(f"[WITHDRAW] Using fee rate: {fee_rate} sats/byte")
+            result = await rpc.call("payto", {
+                "destination": recipient_address,
+                "amount": amount_sats,
+                "fee": None,
+                "feerate": fee_rate
+            })
+        else:
+            print(f"[WITHDRAW] Using default fee rate")
+            result = await rpc.call("payto", {
+                "destination": recipient_address,
+                "amount": amount_sats,
+                "fee": None,
+                "feerate": None
+            })
+        
+        print(f"[WITHDRAW] ✓ Transaction created successfully")
+        
+        # Step 6: Sign the transaction
+        print(f"[WITHDRAW] Step 5: Signing transaction...")
+        signed_result = await rpc.call("signtransaction", {"tx": result})
+        print(f"[WITHDRAW] ✓ Transaction signed successfully")
+        
+        # Step 7: Broadcast the transaction
+        print(f"[WITHDRAW] Step 6: Broadcasting transaction...")
+        broadcast_result = await rpc.call("broadcast", {"tx": signed_result})
+        tx_id = broadcast_result
+        print(f"[WITHDRAW] ✓ Transaction broadcasted successfully")
+        print(f"[WITHDRAW] Transaction ID: {tx_id}")
+        
+        # Step 8: Return success response
+        return {
+            "success": True,
+            "transaction_id": tx_id,
+            "recipient_address": recipient_address,
+            "amount_sats": amount_sats,
+            "fee_rate": fee_rate,
+            "message": f"Successfully sent {amount_sats} sats to {recipient_address}"
+        }
+        
+    except Exception as e:
+        print(f"[WITHDRAW] ❌ Unexpected error: {e}")
+        print(f"[WITHDRAW] Error type: {type(e).__name__}")
+        print(f"[WITHDRAW] Error details: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to withdraw Bitcoin: {str(e)}"
+        )
+
 async def transfer_bitcoin_to_cold_storage(fee_rate: Optional[int] = None):
     """Transfer 70% of withdrawal wallet balance to cold storage address"""
     try:

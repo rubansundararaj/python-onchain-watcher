@@ -12,6 +12,7 @@
 #   POST   /watch                           -> start watching an address
 #   GET    /watch                           -> list watched addresses
 #   POST   /transfer                        -> transfer bitcoin between addresses
+#   POST   /withdraw                        -> withdraw bitcoin from withdrawal wallet
 #   GET    /wallet/balance                  -> electrum.getbalance
 #   POST   /deposit/address                 -> create new deposit address
 #   GET    /deposit/balance                 -> get deposit wallet balance
@@ -66,12 +67,13 @@ from operations import (
     get_current_block_height,
     startup,
     transfer_bitcoin_to_cold_storage,
+    withdraw_bitcoin_to_address,
     get_wallet_balance,
     create_new_deposit_address,
     DEPOSIT_WALLET_NAME,
     WITHDRAWAL_WALLET_NAME
 )
-from models import WatchReq, TransferReq
+from models import WatchReq, TransferReq, WithdrawReq
 
 app = FastAPI(title="Electrum RPC REST Wrapper", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -144,6 +146,28 @@ async def transfer_bitcoin_endpoint(req: TransferReq):
         return result
     except Exception as e:
         print(f"[ENDPOINT] ❌ Error in transfer endpoint: {e}")
+        print(f"[ENDPOINT] Error type: {type(e).__name__}")
+        raise
+
+@app.post("/withdraw")
+async def withdraw_bitcoin_endpoint(req: WithdrawReq):
+    """Withdraw Bitcoin from withdrawal wallet to a specific address"""
+    print(f"[ENDPOINT] /withdraw called with request:")
+    print(f"[ENDPOINT]   recipient_address: {req.recipient_address}")
+    print(f"[ENDPOINT]   amount_sats: {req.amount_sats}")
+    print(f"[ENDPOINT]   fee_rate: {req.fee_rate}")
+    
+    try:
+        print(f"[ENDPOINT] Calling withdraw_bitcoin_to_address function...")
+        result = await withdraw_bitcoin_to_address(
+            req.recipient_address,
+            req.amount_sats,
+            req.fee_rate
+        )
+        print(f"[ENDPOINT] ✓ Withdrawal completed successfully, returning result")
+        return result
+    except Exception as e:
+        print(f"[ENDPOINT] ❌ Error in withdraw endpoint: {e}")
         print(f"[ENDPOINT] Error type: {type(e).__name__}")
         raise
 
