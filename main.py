@@ -53,7 +53,6 @@ load_dotenv()
 
 from operations import (
     get_health_info,
-    create_new_address,
     get_address_balance,
     get_address_utxos,
     get_address_history,
@@ -89,7 +88,7 @@ async def current_block_height():
 @app.post("/addresses")
 async def create_address():
     """Create a new address"""
-    addr = await create_new_address()
+    addr = await create_new_deposit_address()
     return {"address": addr}
 
 @app.get("/addresses/{address}/balance")
