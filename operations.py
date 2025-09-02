@@ -509,7 +509,17 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
             spendable_balance = 0
             for utxo in utxos:
                 if isinstance(utxo, dict) and 'value' in utxo:
-                    spendable_balance += int(utxo['value'])
+                    value = utxo['value']
+                    if isinstance(value, str):
+                        # Convert string value to satoshis
+                        value_float = float(value)
+                        if value_float < 1:  # Likely in BTC
+                            value = int(value_float * 100000000)
+                        else:
+                            value = int(value_float)
+                    else:
+                        value = int(value)
+                    spendable_balance += value
                 elif isinstance(utxo, dict) and 'amount' in utxo:
                     # Handle different UTXO formats
                     amount = utxo['amount']
@@ -555,13 +565,22 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         print(f"[WITHDRAW] ✓ Sufficient balance available")
         
         # Step 5: Unlock wallet for transaction (if it's encrypted)
-        print(f"[WITHDRAW] Step 5: Unlocking wallet for transaction...")
+        print(f"[WITHDRAW] Step 5: Checking if wallet needs unlocking...")
         try:
             # Get the password from environment variable
             password = os.getenv("WITHDRAW_WALLET_V2_PASSWORD")
             if password:
-                await rpc.call("password", {"password": password})
-                print(f"[WITHDRAW] ✓ Wallet unlocked successfully")
+                print(f"[WITHDRAW] Attempting to unlock wallet with password...")
+                try:
+                    await rpc.call("password", {"password": password})
+                    print(f"[WITHDRAW] ✓ Wallet unlocked successfully")
+                except Exception as unlock_error:
+                    error_str = str(unlock_error)
+                    if "wallet has no password" in error_str.lower():
+                        print(f"[WITHDRAW] ✓ Wallet is not encrypted, no unlock needed")
+                    else:
+                        print(f"[WITHDRAW] ⚠️ Wallet unlock failed: {unlock_error}")
+                        # Continue anyway, might still work
             else:
                 print(f"[WITHDRAW] ⚠️ No password found, wallet might not be encrypted")
         except Exception as unlock_error:
@@ -573,8 +592,15 @@ async def withdraw_bitcoin_to_address(recipient_address: str, amount_sats: int, 
         
         # Use payto method for transaction creation
         try:
+            # First, let's check the current fee rate
+            try:
+                current_feerate = await rpc.call("feerate")
+                print(f"[WITHDRAW] Current network fee rate: {current_feerate}")
+            except Exception as feerate_error:
+                print(f"[WITHDRAW] ⚠️ Could not get current fee rate: {feerate_error}")
+            
             if fee_rate:
-                print(f"[WITHDRAW] Using fee rate: {fee_rate} sats/byte")
+                print(f"[WITHDRAW] Using specified fee rate: {fee_rate} sats/byte")
                 result = await rpc.call("payto", {
                     "destination": recipient_address,
                     "amount": amount_sats,
