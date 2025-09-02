@@ -51,7 +51,7 @@ _current_wallet = None
 
 # Wallet configuration
 DEPOSIT_WALLET_NAME = "default_wallet"  # Use existing default wallet as deposit wallet
-WITHDRAWAL_WALLET_NAME = "withdrawal_wallet"
+WITHDRAWAL_WALLET_NAME = "withdraw_wallet_v2"
 
 # ------------------- Operations -------------------
 async def ensure_wallet_loaded(wallet_name: str):
@@ -111,12 +111,72 @@ async def ensure_wallet_loaded(wallet_name: str):
             
             # Load the wallet
             print(f"[WALLET] Loading wallet: {wallet_name}")
-            await rpc.call("load_wallet", {"wallet_path": wallet_name, "password": None})
-            print(f"[WALLET] ✓ Wallet loaded successfully")
             
-            # If it's the withdrawal wallet, try to unlock it if it's encrypted
+            # For withdrawal wallet, we need to provide the password during load
             if wallet_name == WITHDRAWAL_WALLET_NAME:
-                await unlock_withdrawal_wallet_if_needed()
+                # Get the password from environment variable
+                password = os.getenv(f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
+                if not password:
+                    print(f"[WALLET] ❌ No password found for withdrawal wallet in environment variables")
+                    print(f"[WALLET] 🔍 Checking if wallet exists on disk...")
+                    
+                    # Check if wallet file exists on disk
+                    wallet_file_path = f"/root/.electrum/wallets/{WITHDRAWAL_WALLET_NAME}"
+                    if os.path.exists(wallet_file_path):
+                        print(f"[WALLET] ⚠️ Wallet file exists but no password found!")
+                        print(f"[WALLET] 💡 This means the wallet was created in a previous run but password was lost")
+                        print(f"[WALLET] 🔧 Solution: Delete the existing wallet file and recreate it")
+                        print(f"[WALLET] 🗑️ Deleting existing wallet file: {wallet_file_path}")
+                        
+                        try:
+                            os.remove(wallet_file_path)
+                            print(f"[WALLET] ✓ Deleted existing wallet file")
+                            print(f"[WALLET] 🔄 Now creating new wallet with fresh password...")
+                            
+                            # Create a new wallet with a fresh password
+                            await create_secure_withdrawal_wallet()
+                            
+                            # Get the new password
+                            password = os.getenv(f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
+                            if not password:
+                                raise HTTPException(
+                                    status_code=500, 
+                                    detail="Failed to create new withdrawal wallet with password"
+                                )
+                        except Exception as delete_error:
+                            print(f"[WALLET] ❌ Failed to delete existing wallet: {delete_error}")
+                            raise HTTPException(
+                                status_code=500, 
+                                detail=f"Cannot load existing encrypted wallet without password. Please manually delete {wallet_file_path} and restart the application"
+                            )
+                    else:
+                        print(f"[WALLET] 💡 Wallet doesn't exist on disk, will be created with new password")
+                        # Wallet doesn't exist, create it
+                        await create_secure_withdrawal_wallet()
+                        password = os.getenv(f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
+                        if not password:
+                            raise HTTPException(
+                                status_code=500, 
+                                detail="Failed to create withdrawal wallet with password"
+                            )
+                
+                print(f"[WALLET] Loading encrypted withdrawal wallet with password...")
+                await rpc.call("load_wallet", {"wallet_path": wallet_name, "password": password})
+            else:
+                # For other wallets (like default_wallet), try without password first
+                try:
+                    await rpc.call("load_wallet", {"wallet_path": wallet_name, "password": None})
+                except Exception as e:
+                    if "InvalidPassword" in str(e):
+                        print(f"[WALLET] ⚠️ Wallet requires password, but none provided for {wallet_name}")
+                        raise HTTPException(
+                            status_code=500, 
+                            detail=f"Wallet {wallet_name} requires a password but none was provided"
+                        )
+                    else:
+                        raise e
+            
+            print(f"[WALLET] ✓ Wallet loaded successfully")
             
             _current_wallet = wallet_name
             
@@ -163,9 +223,28 @@ async def create_secure_withdrawal_wallet():
         print(f"[SECURE_WALLET] ✓ Set secure file permissions (600) for {wallet_path}")
         
         # Store password securely (in production, use proper secret management)
-        # For now, we'll store it in environment or secure storage
+        # Store in both memory and .env file for persistence
         import os
         os.environ[f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD"] = password
+        
+        # Also store in .env file for persistence across restarts
+        env_file_path = ".env"
+        env_var_name = f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD"
+        
+        # Read existing .env file
+        env_content = ""
+        if os.path.exists(env_file_path):
+            with open(env_file_path, 'r') as f:
+                env_content = f.read()
+        
+        # Check if the variable already exists in .env
+        if f"{env_var_name}=" not in env_content:
+            # Add the password to .env file
+            with open(env_file_path, 'a') as f:
+                f.write(f"\n# Withdrawal wallet password\n{env_var_name}={password}\n")
+            print(f"[SECURE_WALLET] ✓ Password stored in .env file: {env_var_name}")
+        else:
+            print(f"[SECURE_WALLET] ✓ Password already exists in .env file")
         
         print(f"[SECURE_WALLET] ✓ Created secure withdrawal wallet with encryption")
         print(f"[SECURE_WALLET] ⚠️  Password stored in environment variable: {WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD")
@@ -179,33 +258,7 @@ async def create_secure_withdrawal_wallet():
             detail=f"Failed to create secure withdrawal wallet: {str(e)}"
         )
 
-async def unlock_withdrawal_wallet_if_needed():
-    """Unlock the withdrawal wallet if it's encrypted and we have the password"""
-    try:
-        import os
-        
-        # Get the password from environment variable
-        password_env_var = f"{WITHDRAWAL_WALLET_NAME.upper()}_PASSWORD"
-        password = os.environ.get(password_env_var)
-        
-        if not password:
-            print(f"[UNLOCK] ⚠️ No password found in environment variable: {password_env_var}")
-            return
-        
-        print(f"[UNLOCK] Attempting to unlock withdrawal wallet...")
-        
-        # Try to unlock the wallet
-        try:
-            await rpc.call("password", {"password": password})
-            print(f"[UNLOCK] ✓ Withdrawal wallet unlocked successfully")
-        except Exception as unlock_error:
-            print(f"[UNLOCK] ⚠️ Wallet unlock attempt: {unlock_error}")
-            # Wallet might not be encrypted or already unlocked
-            pass
-            
-    except Exception as e:
-        print(f"[UNLOCK] ❌ Failed to unlock withdrawal wallet: {e}")
-        # Don't raise here, as the wallet might work without unlocking
+
 
 def reset_wallet_state():
     """Reset wallet loading state (useful for testing or if wallet needs to be reloaded)"""
