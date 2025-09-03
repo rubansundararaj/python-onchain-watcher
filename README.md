@@ -169,24 +169,75 @@ curl -X GET "http://localhost:8080/wallet/balance"
 - **`unconfirmed_sats`**: Unconfirmed balance in satoshis (integer)
 - **`total_sats`**: Total balance in satoshis (integer)
 
+## Authentication
+
+All API endpoints (except `/login`) now require JWT authentication. 
+
+### Login Endpoint
+
+First, authenticate to get a JWT token:
+
+```bash
+curl -X POST "http://localhost:8080/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "password": "admin123"
+  }'
+```
+
+Response:
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "token_type": "bearer",
+  "expires_in": 1800
+}
+```
+
+### Using the Token
+
+Include the token in the Authorization header for all subsequent requests:
+
+```bash
+curl -X GET "http://localhost:8080/health" \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+```
+
 ## Configuration
 
 Set these environment variables before running:
 
 ```bash
+# Electrum RPC Configuration
 export ELECTRUM_RPC_URL=http://127.0.0.1:7777
 export ELECTRUM_RPC_USER=your_username
 export ELECTRUM_RPC_PASS='your_password'
+
+# Webhook Configuration
 export WEBHOOK_URL=https://example.com/webhook
 export POLL_SECS=15
 export MIN_CONFS=1
+
+# JWT Authentication Configuration
+export JWT_SECRET_KEY=your-super-secret-jwt-key-change-this-in-production
+export JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# API Authentication Credentials
+export API_USERNAME=admin
+export API_PASSWORD=admin123
+
+# App Configuration
+export APP_HOST=0.0.0.0
+export APP_PORT=8000
+export APP_RELOAD=True
 ```
 
 ## Installation & Running
 
 1. Install dependencies:
 ```bash
-pip install fastapi uvicorn[standard] httpx pydantic
+pip install fastapi uvicorn[standard] httpx pydantic python-jose[cryptography] passlib[bcrypt] python-multipart
 ```
 
 2. Run the server:

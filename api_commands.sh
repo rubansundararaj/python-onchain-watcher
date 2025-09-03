@@ -240,3 +240,11 @@ curl -X POST http://localhost:8000/withdraw \
   -H "Content-Type: application/json" \
   -d '{"recipient_address": "bc1qy4lhny44e7vh3g9dszs9r3kkuftfqq8nhpxfne", "amount_sats": 1000, "fee_rate": 2}'
 echo ""
+
+echo "6. Get wallet transaction history:"
+echo "Deposit wallet history:"
+curl -X GET "http://localhost:8000/wallets/history?wallet_type=deposit"
+echo ""
+echo "Withdrawal wallet history:"
+curl -X GET "http://localhost:8000/wallets/history?wallet_type=withdrawal"
+echo ""

@@ -334,6 +334,28 @@ async def get_address_history(address: str):
         print(f"[ERROR] Failed to get address history for {address}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get address history: {str(e)}")
 
+async def get_wallet_history(wallet_type: str = "deposit"):
+    """Get transaction history for the entire wallet"""
+    try:
+        wallet_name = DEPOSIT_WALLET_NAME if wallet_type == "deposit" else WITHDRAWAL_WALLET_NAME
+        print(f"[HISTORY] Getting transaction history for {wallet_name}...")
+        
+        # Ensure the correct wallet is loaded
+        await ensure_wallet_loaded(wallet_name)
+        
+        # Get wallet history
+        history = await rpc.call("history")
+        print(f"[HISTORY] ✓ Retrieved {len(history) if history else 0} transactions")
+        
+        return {
+            "wallet": wallet_name,
+            "transaction_count": len(history) if history else 0,
+            "transactions": history or []
+        }
+    except Exception as e:
+        print(f"[HISTORY] ❌ Failed to get wallet history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get wallet history: {str(e)}")
+
 async def get_transaction_details(txid: str):
     """Get full transaction details by transaction ID"""
     # Try different approaches to get parsed transaction details
