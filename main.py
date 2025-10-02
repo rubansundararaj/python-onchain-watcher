@@ -414,12 +414,12 @@ async def _shutdown():
     """Cleanup resources on shutdown"""
     await cleanup()
 
-# ------------------- Server startup -------------------
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run(
-#         "main:app",
-#         host=os.getenv("APP_HOST", "0.0.0.0"),
-#         port=int(os.getenv("APP_PORT", "8000")),
-#         reload=os.getenv("APP_RELOAD", "True").lower() == "true"
-#     )
+------------------- Server startup -------------------
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host=os.getenv("APP_HOST", "0.0.0.0"),
+        port=int(os.getenv("APP_PORT", "8000")),
+        reload=os.getenv("APP_RELOAD", "True").lower() == "true"
+    )
