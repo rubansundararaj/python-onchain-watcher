@@ -414,7 +414,7 @@ async def _shutdown():
     """Cleanup resources on shutdown"""
     await cleanup()
 
-------------------- Server startup -------------------
+#------------------- Server startup -------------------
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
