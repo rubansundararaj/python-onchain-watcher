@@ -421,5 +421,5 @@ if __name__ == "__main__":
         "main:app",
         host=os.getenv("APP_HOST", "0.0.0.0"),
         port=int(os.getenv("APP_PORT", "8000")),
-        reload=os.getenv("APP_RELOAD", "True").lower() == "true"
+        #reload=os.getenv("APP_RELOAD", "True").lower() == "true"
     )
